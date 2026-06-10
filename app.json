@@ -16,6 +16,12 @@
         "backgroundColor": "#1A6B3C"
       }
     },
-    "web": {}
+    "web": {},
+    "extra": {
+      "eas": {
+        "projectId": "a3af2d41-e02a-4107-a9b4-0fc34a755586"
+      }
+    },
+    "owner": "prathamkaushik2002"
   }
 }
