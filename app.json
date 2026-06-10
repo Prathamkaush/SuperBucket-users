@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Superbuket User",
+    "slug": "superbuket-user",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.superbuket.user"
+    },
+    "android": {
+      "package": "com.superbuket.user",
+      "adaptiveIcon": {
+        "backgroundColor": "#1A6B3C"
+      }
+    },
+    "web": {}
+  }
+}
