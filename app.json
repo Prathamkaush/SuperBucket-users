@@ -2,7 +2,7 @@
   "expo": {
     "name": "Superbuket User",
     "slug": "superbuket-user",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -10,17 +10,18 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.superbuket.user",
-      "buildNumber": "3",
+      "buildNumber": "5",
       "icon": "./assets/images/app-icon.png"
     },
     "android": {
       "package": "com.superbuket.user",
-      "versionCode": 3,
+      "versionCode": 5,
       "icon": "./assets/images/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/app-icon.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "usesCleartextTraffic": true
     },
     "web": {},
     "extra": {
