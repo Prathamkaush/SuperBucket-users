@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -7,29 +9,204 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  NativeModules,
   StatusBar,
   ScrollView,
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import LogoBrand from '../components/LogoBrand';
+import {
+  exchangeGoogleIdToken,
+  sendPhoneOtp,
+  verifyPhoneOtp,
+} from '../services/auth';
+
+const OTP_LENGTH = 4;
+
+function getGoogleSignInModule() {
+  if (!NativeModules.RNGoogleSignin) {
+    return null;
+  }
+
+  return require('@react-native-google-signin/google-signin');
+}
 
 export default function LoginScreen({ navigation }) {
+  const otpInputRefs = useRef([]);
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
+  const [challengeToken, setChallengeToken] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  const handleSendOTP = () => {
-    if (phone.length === 10) setOtpSent(true);
+  useEffect(() => {
+    if (!resendSeconds) return undefined;
+    const timer = setInterval(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendSeconds]);
+
+  useEffect(() => {
+    if (!otpSent) return undefined;
+
+    const focusTimer = setTimeout(() => {
+      otpInputRefs.current[0]?.focus();
+    }, 100);
+
+    return () => clearTimeout(focusTimer);
+  }, [otpSent]);
+
+  const handleSendOTP = async () => {
+    if (phone.length !== 10 || otpLoading) return;
+
+    try {
+      setOtpLoading(true);
+      const response = await sendPhoneOtp(phone);
+      setChallengeToken(response.challengeToken);
+      setOtp(Array(OTP_LENGTH).fill(''));
+      setOtpSent(true);
+      setResendSeconds(response.resendAfter || 30);
+    } catch (error) {
+      Alert.alert('Could not send OTP', error?.message || 'Please try again');
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const handleOtpChange = (val, idx) => {
+    const digits = val.replace(/\D/g, '');
     const newOtp = [...otp];
-    newOtp[idx] = val;
+
+    if (!digits) {
+      newOtp[idx] = '';
+      setOtp(newOtp);
+      return;
+    }
+
+    digits
+      .slice(0, OTP_LENGTH - idx)
+      .split('')
+      .forEach((digit, offset) => {
+        newOtp[idx + offset] = digit;
+      });
+
     setOtp(newOtp);
+
+    const nextIndex = Math.min(idx + digits.length, OTP_LENGTH - 1);
+    if (idx + digits.length < OTP_LENGTH) {
+      otpInputRefs.current[nextIndex]?.focus();
+    } else {
+      otpInputRefs.current[OTP_LENGTH - 1]?.blur();
+    }
   };
 
-  const handleVerify = () => {
-    navigation.replace('Location');
+  const handleOtpKeyPress = (key, idx) => {
+    if (key !== 'Backspace' || otp[idx] || idx === 0) return;
+
+    const newOtp = [...otp];
+    newOtp[idx - 1] = '';
+    setOtp(newOtp);
+    otpInputRefs.current[idx - 1]?.focus();
+  };
+
+  const handleVerify = async () => {
+    const code = otp.join('');
+    if (code.length !== OTP_LENGTH || !challengeToken || otpLoading) return;
+
+    try {
+      setOtpLoading(true);
+      await verifyPhoneOtp(challengeToken, code);
+      navigation.replace('Location');
+    } catch (error) {
+      Alert.alert('OTP verification failed', error?.message || 'Please try again');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    const googleModule = getGoogleSignInModule();
+
+    if (!googleModule) {
+      Alert.alert(
+        'Development build required',
+        'Google sign-in uses native code and cannot run in Expo Go. You can continue testing the rest of the app here.',
+      );
+      return;
+    }
+
+    if (!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+      Alert.alert(
+        'Google sign-in is not configured',
+        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the app environment and rebuild the app.',
+      );
+      return;
+    }
+
+    try {
+      setGoogleLoading(true);
+      const {
+        GoogleSignin,
+        isCancelledResponse,
+        isErrorWithCode,
+        isSuccessResponse,
+        statusCodes,
+      } = googleModule;
+
+      GoogleSignin.configure({
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        iosClientId:
+          process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
+        offlineAccess: false,
+      });
+
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({
+          showPlayServicesUpdateDialog: true,
+        });
+      }
+
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response)) {
+        return;
+      }
+
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        throw new Error(
+          'Google did not return an ID token. Check the Web client ID.',
+        );
+      }
+
+      await exchangeGoogleIdToken(idToken);
+      navigation.replace('Location');
+    } catch (error) {
+      const {
+        isCancelledResponse,
+        isErrorWithCode,
+        statusCodes,
+      } = googleModule;
+
+      if (isCancelledResponse(error)) {
+        return;
+      }
+
+      let message = error?.message || 'Unable to sign in with Google';
+      if (isErrorWithCode(error)) {
+        if (error.code === statusCodes.IN_PROGRESS) {
+          message = 'Google sign-in is already in progress';
+        } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          message = 'Google Play Services is unavailable or out of date';
+        }
+      }
+
+      Alert.alert('Google sign-in failed', message);
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -71,13 +248,17 @@ export default function LoginScreen({ navigation }) {
                   keyboardType="phone-pad"
                   maxLength={10}
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={(value) => setPhone(value.replace(/\D/g, ''))}
                 />
               </View>
 
               <TouchableOpacity
-                style={[styles.btn, phone.length !== 10 && styles.btnDisabled]}
+                style={[
+                  styles.btn,
+                  (phone.length !== 10 || otpLoading) && styles.btnDisabled,
+                ]}
                 onPress={handleSendOTP}
+                disabled={phone.length !== 10 || otpLoading}
                 activeOpacity={0.85}
               >
                 <Text style={styles.btnText}>Continue →</Text>
@@ -89,17 +270,32 @@ export default function LoginScreen({ navigation }) {
                 <View style={styles.line} />
               </View>
 
-              <TouchableOpacity style={styles.googleBtn} activeOpacity={0.8}>
-                <Text style={styles.googleIcon}>G</Text>
-                <Text style={styles.googleText}>Continue with Google</Text>
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Soon</Text>
-                </View>
+              <TouchableOpacity
+                style={[styles.googleBtn, googleLoading && styles.googleBtnDisabled]}
+                activeOpacity={0.8}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={Colors.secondary} />
+                ) : (
+                  <>
+                    <Text style={styles.googleIcon}>G</Text>
+                    <Text style={styles.googleText}>Continue with Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </>
           ) : (
             <>
-              <TouchableOpacity onPress={() => setOtpSent(false)} style={styles.backBtn}>
+              <TouchableOpacity
+                onPress={() => {
+                  setOtpSent(false);
+                  setOtp(Array(OTP_LENGTH).fill(''));
+                }}
+                style={styles.backBtn}
+                disabled={otpLoading}
+              >
                 <Text style={styles.backText}>← Change Number</Text>
               </TouchableOpacity>
               <Text style={styles.title}>Verify OTP</Text>
@@ -109,21 +305,56 @@ export default function LoginScreen({ navigation }) {
                 {otp.map((digit, idx) => (
                   <TextInput
                     key={idx}
+                    ref={(input) => {
+                      otpInputRefs.current[idx] = input;
+                    }}
                     style={[styles.otpBox, digit.length > 0 && styles.otpBoxFilled]}
-                    maxLength={1}
+                    maxLength={OTP_LENGTH}
                     keyboardType="number-pad"
+                    textContentType={idx === 0 ? 'oneTimeCode' : 'none'}
+                    autoComplete={idx === 0 ? 'sms-otp' : 'off'}
+                    selectTextOnFocus
                     value={digit}
                     onChangeText={(val) => handleOtpChange(val, idx)}
+                    onKeyPress={({ nativeEvent }) =>
+                      handleOtpKeyPress(nativeEvent.key, idx)
+                    }
                   />
                 ))}
               </View>
 
-              <TouchableOpacity style={styles.btn} onPress={handleVerify} activeOpacity={0.85}>
-                <Text style={styles.btnText}>Verify & Login</Text>
+              <TouchableOpacity
+                style={[
+                  styles.btn,
+                  (otp.join('').length !== OTP_LENGTH || otpLoading) &&
+                    styles.btnDisabled,
+                ]}
+                onPress={handleVerify}
+                disabled={otp.join('').length !== OTP_LENGTH || otpLoading}
+                activeOpacity={0.85}
+              >
+                {otpLoading ? (
+                  <ActivityIndicator color={Colors.white} />
+                ) : (
+                  <Text style={styles.btnText}>Verify & Login</Text>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.resendBtn}>
-                <Text style={styles.resendText}>Resend OTP in 30s</Text>
+              <TouchableOpacity
+                style={styles.resendBtn}
+                onPress={handleSendOTP}
+                disabled={resendSeconds > 0 || otpLoading}
+              >
+                <Text
+                  style={[
+                    styles.resendText,
+                    resendSeconds > 0 && styles.resendTextDisabled,
+                  ]}
+                >
+                  {resendSeconds > 0
+                    ? `Resend OTP in ${resendSeconds}s`
+                    : 'Resend OTP'}
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -280,17 +511,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
   },
-  comingSoonBadge: {
-    backgroundColor: Colors.secondaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  comingSoonText: {
-    fontSize: FontSize.xxs,
-    color: Colors.secondary,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+  googleBtnDisabled: {
+    opacity: 0.65,
   },
   backBtn: { marginBottom: 16 },
   backText: { color: Colors.secondary, fontWeight: '700', fontSize: FontSize.sm },
@@ -318,6 +540,7 @@ const styles = StyleSheet.create({
   },
   resendBtn: { alignItems: 'center', marginTop: 16 },
   resendText: { color: Colors.secondary, fontSize: FontSize.sm, fontWeight: '600' },
+  resendTextDisabled: { color: Colors.textMuted },
   terms: {
     textAlign: 'center',
     marginTop: 28,

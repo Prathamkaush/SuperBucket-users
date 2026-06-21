@@ -1,169 +1,308 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import { getCart, removeCartItem, updateCartItem } from '../services/cart';
 
-const CART_ITEMS = [
-  { id: '1', name: 'Fortune Sunflower Oil', qty: 1, price: 145, icon: '🫙' },
-  { id: '2', name: 'Aashirvaad Atta 5kg', qty: 2, price: 265, icon: '🌾' },
-  { id: '3', name: 'Tata Tea Gold', qty: 1, price: 280, icon: '🍵' },
-];
+const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 
 export default function CartScreen({ navigation }) {
-  const [items, setItems] = useState(CART_ITEMS);
-  const [paymentMethod, setPaymentMethod] = useState('wallet');
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
 
-  const updateQty = (id, delta) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, qty: Math.max(1, item.qty + delta) } : item
-      )
-    );
+  const loadCart = useCallback(async () => {
+    try {
+      const cartItems = await getCart();
+      setItems(cartItems);
+    } catch (error) {
+      Alert.alert('Could not load cart', error?.message || 'Please try again');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCart();
+    }, [loadCart]),
+  );
+
+  const changeQuantity = async (item, nextQuantity) => {
+    if (updatingId) return;
+    setUpdatingId(item.id);
+
+    try {
+      if (nextQuantity < 1) {
+        await removeCartItem(item.id);
+        setItems((current) => current.filter((entry) => entry.id !== item.id));
+      } else {
+        await updateCartItem(item.id, nextQuantity);
+        setItems((current) =>
+          current.map((entry) =>
+            entry.id === item.id ? { ...entry, quantity: nextQuantity } : entry,
+          ),
+        );
+      }
+    } catch (error) {
+      Alert.alert('Could not update cart', error?.message || 'Please try again');
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const deliveryFee = subtotal > 299 ? 0 : 25;
-  const total = subtotal + deliveryFee;
-
-  const paymentMethods = [
-    { key: 'wallet', icon: '💰', label: 'Superbuket Wallet', sub: 'Balance: ₹240' },
-    { key: 'upi', icon: '📲', label: 'UPI / Net Banking', sub: 'Instant payment' },
-    { key: 'cod', icon: '💵', label: 'Cash on Delivery', sub: 'Pay when delivered' },
-  ];
+  const totals = useMemo(
+    () =>
+      items.reduce(
+        (result, item) => {
+          result.quantity += item.quantity;
+          result.subtotal += item.price * item.quantity;
+          result.gst += item.gstAmount * item.quantity;
+          return result;
+        },
+        { quantity: 0, subtotal: 0, gst: 0 },
+      ),
+    [items],
+  );
+  const total = totals.subtotal + totals.gst;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Your Cart</Text>
-        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: FontSize.sm }}>{items.length} items</Text>
+        <Text style={styles.itemCount}>{totals.quantity} items</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Items</Text>
-          {items.map((item) => (
-            <View key={item.id} style={styles.cartItem}>
-              <View style={styles.itemIcon}>
-                <Text style={{ fontSize: 30 }}>{item.icon}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemPrice}>₹{item.price} each</Text>
-              </View>
-              <View style={styles.qtyControl}>
-                <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, -1)}>
-                  <Text style={styles.qtyBtnText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.qtyCount}>{item.qty}</Text>
-                <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, 1)}>
-                  <Text style={styles.qtyBtnText}>+</Text>
-                </TouchableOpacity>
+      {loading && !items.length ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.stateText}>Loading your cart...</Text>
+        </View>
+      ) : !items.length ? (
+        <View style={styles.centerState}>
+          <Text style={styles.emptyMark}>0</Text>
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.stateText}>Add products to see them here.</Text>
+          <TouchableOpacity
+            style={styles.shopButton}
+            onPress={() => navigation.navigate('Grocery')}
+          >
+            <Text style={styles.shopButtonText}>Browse Products</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.content}
+            refreshing={loading}
+            onRefresh={loadCart}
+          >
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Items</Text>
+              {items.map((item) => (
+                <View key={item.id} style={styles.cartItem}>
+                  <View style={styles.itemImageBox}>
+                    {item.imageUrl ? (
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.itemImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Text style={styles.imageFallback}>
+                        {item.name.charAt(0).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.itemCopy}>
+                    <Text style={styles.itemName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    {item.option ? <Text style={styles.itemOption}>{item.option}</Text> : null}
+                    <Text style={styles.itemPrice}>{money(item.price)} each</Text>
+                  </View>
+                  <View style={styles.qtyControl}>
+                    <TouchableOpacity
+                      style={styles.qtyButton}
+                      disabled={updatingId === item.id}
+                      onPress={() => changeQuantity(item, item.quantity - 1)}
+                    >
+                      <Text style={styles.qtyButtonText}>
+                        {item.quantity === 1 ? 'x' : '-'}
+                      </Text>
+                    </TouchableOpacity>
+                    {updatingId === item.id ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <Text style={styles.qtyCount}>{item.quantity}</Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.qtyButton}
+                      disabled={updatingId === item.id}
+                      onPress={() => changeQuantity(item, item.quantity + 1)}
+                    >
+                      <Text style={styles.qtyButtonText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Bill Summary</Text>
+              <View style={styles.billCard}>
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Items subtotal</Text>
+                  <Text style={styles.billValue}>{money(totals.subtotal)}</Text>
+                </View>
+                {totals.gst > 0 ? (
+                  <View style={styles.billRow}>
+                    <Text style={styles.billLabel}>GST</Text>
+                    <Text style={styles.billValue}>{money(totals.gst)}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Delivery</Text>
+                  <Text style={styles.deliveryText}>Calculated at checkout</Text>
+                </View>
+                <View style={[styles.billRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>Cart total</Text>
+                  <Text style={styles.totalValue}>{money(total)}</Text>
+                </View>
               </View>
             </View>
-          ))}
-        </View>
+          </ScrollView>
 
-        <View style={styles.section}>
-          <View style={styles.slotCard}>
-            <Text style={{ fontSize: 20, marginRight: 10 }}>🚚</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.slotTitle}>Evening Slot — 5 PM to 9 PM</Text>
-              <Text style={styles.slotSub}>Estimated delivery: Today</Text>
+          <View style={styles.footer}>
+            <View>
+              <Text style={styles.footerTotal}>{money(total)}</Text>
+              <Text style={styles.footerSub}>Before delivery charges</Text>
             </View>
-            <Text style={styles.changeText}>Change</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bill Summary</Text>
-          <View style={styles.billCard}>
-            {[
-              { label: 'Subtotal', val: `₹${subtotal}` },
-              { label: 'Delivery', val: deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}` },
-            ].map(({ label, val }) => (
-              <View key={label} style={styles.billRow}>
-                <Text style={styles.billLabel}>{label}</Text>
-                <Text style={[styles.billVal, val === 'FREE' && { color: Colors.success }]}>{val}</Text>
-              </View>
-            ))}
-            <View style={[styles.billRow, styles.billTotal]}>
-              <Text style={styles.billTotalLabel}>Total</Text>
-              <Text style={styles.billTotalVal}>₹{total}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          {paymentMethods.map((pm) => (
             <TouchableOpacity
-              key={pm.key}
-              style={[styles.paymentOption, paymentMethod === pm.key && styles.paymentOptionActive]}
-              onPress={() => setPaymentMethod(pm.key)}
+              style={styles.checkoutButton}
+              onPress={() =>
+                navigation.navigate('Location', { returnToCart: true })
+              }
+              activeOpacity={0.85}
             >
-              <Text style={{ fontSize: 22, marginRight: 12 }}>{pm.icon}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.paymentLabel}>{pm.label}</Text>
-                <Text style={styles.paymentSub}>{pm.sub}</Text>
-              </View>
-              <View style={[styles.radio, paymentMethod === pm.key && styles.radioActive]}>
-                {paymentMethod === pm.key && <View style={styles.radioDot} />}
-              </View>
+              <Text style={styles.checkoutText}>CONTINUE</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <View>
-          <Text style={styles.footerTotal}>₹{total}</Text>
-          <Text style={styles.footerSub}>Total amount</Text>
-        </View>
-        <TouchableOpacity style={styles.placeOrderBtn} onPress={() => navigation.navigate('OrderTracking')} activeOpacity={0.85}>
-          <Text style={styles.placeOrderText}>PLACE ORDER →</Text>
-        </TouchableOpacity>
-      </View>
+          </View>
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg },
-  headerTitle: { flex: 1, fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
-  section: { paddingHorizontal: Spacing.lg, marginTop: 16 },
-  sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textPrimary, marginBottom: 10 },
-  cartItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.md, padding: 12, marginBottom: 8, ...Shadow.sm },
-  itemIcon: { width: 50, height: 50, backgroundColor: Colors.gray100, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  itemName: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textPrimary },
-  itemPrice: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 48,
+    paddingBottom: 14,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.primaryLight,
+  },
+  headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '700' },
+  itemCount: { color: Colors.textMuted, fontSize: FontSize.sm },
+  content: { paddingBottom: 130 },
+  section: { marginTop: 16, paddingHorizontal: Spacing.lg },
+  sectionTitle: { marginBottom: 10, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '700' },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.white,
+    ...Shadow.sm,
+  },
+  itemImageBox: {
+    width: 58,
+    height: 58,
+    marginRight: 12,
+    overflow: 'hidden',
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemImage: { width: '100%', height: '100%' },
+  imageFallback: { color: Colors.primary, fontSize: 24, fontWeight: '900' },
+  itemCopy: { flex: 1, paddingRight: 8 },
+  itemName: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '700' },
+  itemOption: { marginTop: 2, color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '700' },
+  itemPrice: { marginTop: 3, color: Colors.textMuted, fontSize: FontSize.xs },
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyBtn: { width: 28, height: 28, backgroundColor: Colors.primary, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  qtyCount: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textPrimary, minWidth: 20, textAlign: 'center' },
-  slotCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primaryLight, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.primary, padding: 14 },
-  slotTitle: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
-  slotSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  changeText: { fontSize: FontSize.sm, color: Colors.secondary, fontWeight: '700' },
-  billCard: { backgroundColor: Colors.white, borderRadius: Radius.md, padding: 16, ...Shadow.sm },
-  billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  billLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  billVal: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textPrimary },
-  billTotal: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 10, marginTop: 4 },
-  billTotalLabel: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textPrimary },
-  billTotalVal: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.primary },
-  paymentOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.md, padding: 14, marginBottom: 8, borderWidth: 1.5, borderColor: Colors.border, ...Shadow.sm },
-  paymentOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  paymentLabel: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textPrimary },
-  paymentSub: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  radioActive: { borderColor: Colors.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingBottom: 32, borderTopWidth: 1, borderTopColor: Colors.border, ...Shadow.lg },
-  footerTotal: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.primary },
-  footerSub: { fontSize: FontSize.xs, color: Colors.textMuted },
-  placeOrderBtn: { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: 24, paddingVertical: 14 },
-  placeOrderText: { color: Colors.white, fontWeight: '800', fontSize: FontSize.md, letterSpacing: 1 },
+  qtyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyButtonText: { color: Colors.white, fontSize: 16, fontWeight: '800' },
+  qtyCount: { minWidth: 20, textAlign: 'center', color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700' },
+  billCard: { padding: 16, borderRadius: Radius.md, backgroundColor: Colors.white, ...Shadow.sm },
+  billRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 10 },
+  billLabel: { color: Colors.textSecondary, fontSize: FontSize.sm },
+  billValue: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '600' },
+  deliveryText: { color: Colors.success, fontSize: FontSize.xs, fontWeight: '700' },
+  totalRow: { marginTop: 4, marginBottom: 0, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
+  totalLabel: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700' },
+  totalValue: { color: Colors.primary, fontSize: FontSize.xl, fontWeight: '800' },
+  centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl },
+  emptyMark: {
+    width: 72,
+    height: 72,
+    paddingTop: 17,
+    borderRadius: 36,
+    overflow: 'hidden',
+    textAlign: 'center',
+    color: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+    fontSize: FontSize.xxl,
+    fontWeight: '900',
+  },
+  emptyTitle: { marginTop: 16, color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '900' },
+  stateText: { marginTop: 8, color: Colors.textMuted, textAlign: 'center' },
+  shopButton: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, borderRadius: Radius.md, backgroundColor: Colors.primary },
+  shopButtonText: { color: Colors.white, fontWeight: '800' },
+  footer: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.white,
+    ...Shadow.lg,
+  },
+  footerTotal: { color: Colors.primary, fontSize: FontSize.xxl, fontWeight: '800' },
+  footerSub: { color: Colors.textMuted, fontSize: FontSize.xs },
+  checkoutButton: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: Radius.md, backgroundColor: Colors.primary },
+  checkoutText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '800', letterSpacing: 1 },
 });

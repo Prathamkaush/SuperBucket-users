@@ -24,7 +24,7 @@ export default function OrderTrackingScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
@@ -104,9 +104,9 @@ export default function OrderTrackingScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
-  headerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  header: { backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary },
+  headerSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
   mapPlaceholder: { backgroundColor: Colors.primaryLight, height: 200, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: Colors.border },
   riderEmoji: { fontSize: 56, marginBottom: 8 },
   mapText: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary },

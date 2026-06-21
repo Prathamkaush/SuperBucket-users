@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   icon: {
-    color: Colors.white,
+    color: Colors.textPrimary,
     fontSize: 30,
     fontWeight: '600',
     lineHeight: 32,

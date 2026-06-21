@@ -10,7 +10,7 @@ export default function ParcelScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Parcel Pickup & Drop</Text>
@@ -86,8 +86,8 @@ export default function ParcelScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg },
-  headerTitle: { flex: 1, fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
+  header: { backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  headerTitle: { flex: 1, fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary },
   addressCard: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 20, ...Shadow.md },
   addressRow: { flexDirection: 'row', alignItems: 'center' },
   dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.primary, marginRight: 12 },

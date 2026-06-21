@@ -1,63 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Image, ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import { getLiveProperties } from '../services/properties';
+import { getUploadUrl } from '../services/api';
 
-const RENTALS = [
-  {
-    id: '1', type: '2BHK', area: 'Sector 12', rent: '₹12,000/mo',
-    size: '850 sq ft', floor: '3rd Floor', verified: true, icon: '🏢',
-    amenities: ['WiFi', 'Parking', 'AC'],
-  },
-  {
-    id: '2', type: '1BHK', area: 'Model Town', rent: '₹7,500/mo',
-    size: '500 sq ft', floor: 'Ground', verified: true, icon: '🏠',
-    amenities: ['WiFi', 'Furnished'],
-  },
-  {
-    id: '3', type: 'Hostel', area: 'Near University', rent: '₹3,500/mo',
-    size: 'Sharing Room', floor: '1st Floor', verified: true, icon: '🏨',
-    amenities: ['Meals', 'WiFi', 'Laundry'],
-  },
-  {
-    id: '4', type: '3BHK', area: 'Green Park', rent: '₹22,000/mo',
-    size: '1400 sq ft', floor: '5th Floor', verified: false, icon: '🏘️',
-    amenities: ['Parking', 'AC', 'Power Backup'],
-  },
-];
+const FILTERS = ['All', 'Residential', 'Commercial', 'Hostel', 'Land', 'Warehouse'];
 
-const FILTERS = ['All', '1BHK', '2BHK', '3BHK', 'Hostel', 'Budget'];
-
-const TYPE_COLORS = {
-  '2BHK':   { bg: Colors.primaryLight,   text: Colors.primary   },
-  '1BHK':   { bg: Colors.secondaryLight, text: Colors.secondary },
-  'Hostel': { bg: '#FFF3E6',             text: '#E65C00'        },
-  '3BHK':   { bg: '#F5F0FF',             text: '#7C3AED'        },
+const CATEGORY_COLORS = {
+  'RESIDENTIAL': { bg: Colors.primaryLight, text: Colors.primary, icon: '🏢' },
+  'COMMERCIAL':  { bg: Colors.secondaryLight, text: Colors.secondary, icon: '🏪' },
+  'HOSTEL':      { bg: '#FFF3E6',             text: '#E65C00',         icon: '🏨' },
+  'LAND':        { bg: '#F5F0FF',             text: '#7C3AED',         icon: '🏞️' },
+  'WAREHOUSE':   { bg: '#E6F4EA',             text: '#137333',         icon: '🏭' },
 };
 
 export default function RentalsScreen({ navigation }) {
+  const [loading, setLoading] = useState(true);
+  const [properties, setProperties] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
 
-  const filtered = activeFilter === 'All'
-    ? RENTALS
-    : RENTALS.filter(r => r.type.includes(activeFilter));
+  const loadProperties = useCallback(async () => {
+    try {
+      const response = await getLiveProperties();
+      setProperties(response.properties || []);
+    } catch (error) {
+      console.log('Error loading properties:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProperties();
+    }, [loadProperties])
+  );
+
+  const filtered = properties.filter((item) => {
+    if (activeFilter === 'All') return true;
+    return item.category === activeFilter.toUpperCase();
+  });
+
+  const sponsored = properties.filter((item) => item.isAdvertised);
+
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.secondary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.secondaryLight} />
 
       {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Rentals</Text>
-          <Text style={styles.headerSub}>Find your perfect home in town</Text>
+          <Text style={styles.headerTitle}>Rentals & Sales</Text>
+          <Text style={styles.headerSub}>Find your perfect property in town</Text>
         </View>
-        <TouchableOpacity style={styles.filterBtn}>
-          <Text style={styles.filterBtnText}>⚙️ Filter</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Filter chips */}
@@ -81,73 +82,167 @@ export default function RentalsScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {/* Cards */}
-      <ScrollView
-        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 50, gap: 16 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {filtered.map((rental) => {
-          const typeColor = TYPE_COLORS[rental.type] || { bg: Colors.gray100, text: Colors.textSecondary };
-          return (
-            <View key={rental.id} style={styles.rentalCard}>
-              {/* Image placeholder */}
-              <View style={[styles.rentalImage, { backgroundColor: typeColor.bg }]}>
-                <Text style={styles.rentalEmoji}>{rental.icon}</Text>
+      {loading ? (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color={Colors.secondary} />
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 50, gap: 16 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Sponsored Ads Section */}
+          {sponsored.length > 0 && (
+            <View style={styles.sponsoredSection}>
+              <Text style={styles.sponsoredSectionTitle}>Sponsored Promoted Ads 🚀</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sponsoredContent}
+              >
+                {sponsored.map((ad) => {
+                  const adConfig = CATEGORY_COLORS[ad.category] || {
+                    bg: Colors.gray100,
+                    text: Colors.textSecondary,
+                    icon: '🏡',
+                  };
+                  const adImg = ad.frontImage
+                    ? getUploadUrl('properties', ad.frontImage)
+                    : null;
+                  const adPrice = parseFloat(ad.price).toLocaleString('en-IN');
 
-                {rental.verified && (
-                  <View style={styles.verifiedBadge}>
-                    <Text style={styles.verifiedText}>✓ Verified</Text>
-                  </View>
-                )}
-
-                <View style={[styles.typePill, { backgroundColor: typeColor.text }]}>
-                  <Text style={styles.typePillText}>{rental.type}</Text>
-                </View>
-              </View>
-
-              {/* Info */}
-              <View style={styles.rentalInfo}>
-                <View style={styles.infoTop}>
-                  <View>
-                    <Text style={styles.rentalType}>{rental.type} · {rental.area}</Text>
-                    <Text style={styles.rentalArea}>📍 {rental.area}</Text>
-                  </View>
-                  <Text style={[styles.rentalRent, { color: typeColor.text }]}>
-                    {rental.rent}
-                  </Text>
-                </View>
-
-                {/* Details tags */}
-                <View style={styles.tagRow}>
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>📐 {rental.size}</Text>
-                  </View>
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>🏗️ {rental.floor}</Text>
-                  </View>
-                </View>
-
-                {/* Amenities */}
-                <View style={styles.amenitiesRow}>
-                  {rental.amenities.map((a) => (
-                    <View key={a} style={[styles.amenityChip, { backgroundColor: typeColor.bg }]}>
-                      <Text style={[styles.amenityText, { color: typeColor.text }]}>{a}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.viewBtn, { backgroundColor: typeColor.text }]}
-                  activeOpacity={0.85}
-                  onPress={() => navigation.navigate('RentalDetail', { rental })}
-                >
-                  <Text style={styles.viewBtnText}>View Details →</Text>
-                </TouchableOpacity>
-              </View>
+                  return (
+                    <TouchableOpacity
+                      key={ad.id}
+                      style={[styles.adCard, { borderColor: adConfig.text }]}
+                      activeOpacity={0.86}
+                      onPress={() =>
+                        navigation.navigate('RentalDetail', { rentalId: ad.id })
+                      }
+                    >
+                      <View style={[styles.adImageWrap, { backgroundColor: adConfig.bg }]}>
+                        {adImg ? (
+                          <Image
+                            source={{ uri: adImg }}
+                            style={styles.adImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={styles.adEmoji}>{adConfig.icon}</Text>
+                        )}
+                        <View style={styles.adBadge}>
+                          <Text style={styles.adBadgeText}>SPONSORED</Text>
+                        </View>
+                        <View
+                          style={[styles.adTypePill, { backgroundColor: adConfig.text }]}
+                        >
+                          <Text style={styles.adTypePillText}>{ad.mode}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.adInfo}>
+                        <Text style={styles.adTitle} numberOfLines={1}>
+                          {ad.title}
+                        </Text>
+                        <Text style={styles.adRent} numberOfLines={1}>
+                          ₹{adPrice}
+                          {ad.mode === 'RENT' ? '/mo' : ''}
+                        </Text>
+                        <Text style={styles.adArea} numberOfLines={1}>
+                          📍 {ad.address}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
-          );
-        })}
-      </ScrollView>
+          )}
+
+          {filtered.length > 0 ? (
+
+            filtered.map((rental) => {
+              const catConfig = CATEGORY_COLORS[rental.category] || { bg: Colors.gray100, text: Colors.textSecondary, icon: '🏡' };
+              const imageUrl = rental.frontImage ? getUploadUrl('properties', rental.frontImage) : null;
+              const formattedPrice = parseFloat(rental.price).toLocaleString('en-IN');
+              
+              return (
+                <View key={rental.id} style={styles.rentalCard}>
+                  {/* Image */}
+                  <View style={[styles.rentalImageWrap, { backgroundColor: catConfig.bg }]}>
+                    {imageUrl ? (
+                      <Image source={{ uri: imageUrl }} style={styles.rentalImage} resizeMode="cover" />
+                    ) : (
+                      <Text style={styles.rentalEmoji}>{catConfig.icon}</Text>
+                    )}
+
+                    {rental.verification === 'VERIFIED' && (
+                      <View style={styles.verifiedBadge}>
+                        <Text style={styles.verifiedText}>✓ Verified</Text>
+                      </View>
+                    )}
+
+                    {rental.isAdvertised && (
+                      <View
+                        style={[
+                          styles.verifiedBadge,
+                          {
+                            left: rental.verification === 'VERIFIED' ? 88 : 10,
+                            backgroundColor: Colors.primary,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.verifiedText}>🔥 Sponsored</Text>
+                      </View>
+                    )}
+
+                    <View style={[styles.typePill, { backgroundColor: catConfig.text }]}>
+                      <Text style={styles.typePillText}>{rental.mode}</Text>
+                    </View>
+                  </View>
+
+
+                  {/* Info */}
+                  <View style={styles.rentalInfo}>
+                    <View style={styles.infoTop}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={styles.rentalType} numberOfLines={1}>{rental.title}</Text>
+                        <Text style={styles.rentalArea} numberOfLines={1}>📍 {rental.address}</Text>
+                      </View>
+                      <Text style={[styles.rentalRent, { color: catConfig.text }]}>
+                        ₹{formattedPrice}{rental.mode === 'RENT' ? '/mo' : ''}
+                      </Text>
+                    </View>
+
+                    {/* Details tags */}
+                    <View style={styles.tagRow}>
+                      <View style={styles.tag}>
+                        <Text style={styles.tagText}>📐 {rental.size}</Text>
+                      </View>
+                      {rental.floor && (
+                        <View style={styles.tag}>
+                          <Text style={styles.tagText}>🏗️ {rental.floor}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.viewBtn, { backgroundColor: catConfig.text }]}
+                      activeOpacity={0.85}
+                      onPress={() => navigation.navigate('RentalDetail', { rentalId: rental.id })}
+                    >
+                      <Text style={styles.viewBtnText}>View Details →</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No properties found under this category.</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -156,28 +251,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
-    backgroundColor: Colors.secondary,
+    backgroundColor: Colors.secondaryLight,
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 52,
     paddingBottom: 16,
     paddingHorizontal: Spacing.lg,
     gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  backBtn: {
-    width: 36, height: 36, borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backArrow: { fontSize: 20, color: Colors.white, fontWeight: '700' },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white },
-  headerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
-  filterBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: Radius.sm, borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  filterBtnText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '700' },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
+  headerSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
 
   filtersBar: {
     backgroundColor: Colors.white,
@@ -193,6 +278,27 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.textSecondary },
   chipTextActive: { color: Colors.white },
 
+  loaderWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.lg,
+  },
+  emptyText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+  },
+
   /* Rental card */
   rentalCard: {
     backgroundColor: Colors.white,
@@ -200,11 +306,15 @@ const styles = StyleSheet.create({
     ...Shadow.md,
     overflow: 'hidden',
   },
-  rentalImage: {
+  rentalImageWrap: {
     height: 148,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+  },
+  rentalImage: {
+    width: '100%',
+    height: '100%',
   },
   rentalEmoji: { fontSize: 52 },
   verifiedBadge: {
@@ -234,16 +344,93 @@ const styles = StyleSheet.create({
   },
   tagText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
 
-  amenitiesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  amenityChip: {
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: Radius.full,
-  },
-  amenityText: { fontSize: 10, fontWeight: '700' },
-
   viewBtn: {
     borderRadius: Radius.md, paddingVertical: 11,
     alignItems: 'center', marginTop: 4,
   },
   viewBtnText: { color: Colors.white, fontWeight: '800', fontSize: FontSize.sm },
+
+  /* Sponsored Ads Carousel Styles */
+  sponsoredSection: {
+    marginBottom: 8,
+  },
+  sponsoredSectionTitle: {
+    fontSize: FontSize.md,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  sponsoredContent: {
+    gap: 12,
+    paddingBottom: 4,
+  },
+  adCard: {
+    width: 200,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    ...Shadow.sm,
+  },
+  adImageWrap: {
+    height: 106,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  adImage: {
+    width: '100%',
+    height: '100%',
+  },
+  adEmoji: {
+    fontSize: 38,
+  },
+  adBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.xs,
+  },
+  adBadgeText: {
+    fontSize: 8,
+    color: Colors.white,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  adTypePill: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  adTypePillText: {
+    fontSize: 9,
+    color: Colors.white,
+    fontWeight: '900',
+  },
+  adInfo: {
+    padding: 10,
+    gap: 3,
+  },
+  adTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  adRent: {
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+  adArea: {
+    fontSize: FontSize.xxs,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
 });
+

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Superbuket User",
     "slug": "superbuket-user",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -10,12 +10,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.superbuket.user",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "icon": "./assets/images/app-icon.png"
     },
     "android": {
       "package": "com.superbuket.user",
-      "versionCode": 2,
+      "versionCode": 3,
       "icon": "./assets/images/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/app-icon.png",
@@ -28,6 +28,16 @@
         "projectId": "a3af2d41-e02a-4107-a9b4-0fc34a755586"
       }
     },
-    "owner": "prathamkaushik2002"
+    "owner": "prathamkaushik2002",
+    "plugins": [
+      "@react-native-google-signin/google-signin",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow SuperBucket to use your location to auto-detect your delivery address."
+        }
+      ]
+    ]
   }
 }

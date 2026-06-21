@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,46 +6,137 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Image,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
-
-const FALLBACK_RENTAL = {
-  type: 'Rental Place',
-  area: 'Nearby',
-  rent: 'Rs 0/mo',
-  size: 'Details available',
-  floor: 'Contact owner',
-  verified: false,
-  icon: '',
-  amenities: [],
-};
+import { getPropertyDetail, submitInquiry } from '../services/properties';
+import { getUploadUrl } from '../services/api';
 
 export default function RentalDetailScreen({ route, navigation }) {
-  const rental = { ...FALLBACK_RENTAL, ...(route?.params?.rental || {}) };
-  const facts = [
-    { label: 'Area', value: rental.area },
-    { label: 'Size', value: rental.size },
-    { label: 'Floor', value: rental.floor },
-    { label: 'Status', value: rental.verified ? 'Verified listing' : 'Owner listed' },
-  ];
+  const { rentalId } = route.params || {};
+  const [loading, setLoading] = useState(true);
+  const [property, setProperty] = useState(null);
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function loadDetail() {
+      if (!rentalId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const data = await getPropertyDetail(rentalId);
+        setProperty(data);
+      } catch (error) {
+        Alert.alert('Error', 'Could not load property details.');
+        console.log('Error loading property detail:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDetail();
+  }, [rentalId]);
+
+  if (loading) {
+    return (
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator size="large" color={Colors.secondary} />
+      </View>
+    );
+  }
+
+  if (!property) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>Property details not found.</Text>
+      </View>
+    );
+  }
+
+  const imageUrl = property.frontImage ? getUploadUrl('properties', property.frontImage) : null;
+  const formattedPrice = parseFloat(property.price).toLocaleString('en-IN');
+
+  const handleCall = () => {
+    const phone = property.owner?.phone;
+    if (!phone) {
+      Alert.alert('Unavailable', 'Owner phone number is not listed.');
+      return;
+    }
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Error', 'Could not open dialer');
+    });
+  };
+
+  const handleInquirySubmit = async () => {
+    if (!message.trim()) {
+      Alert.alert('Validation Error', 'Please type a message to send to the owner.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await submitInquiry(property.id, message.trim());
+      Alert.alert('Inquiry Sent', 'Your query has been sent to the property owner successfully!');
+      setMessage('');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Could not send inquiry.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleScheduleVisit = () => {
+    Alert.prompt(
+      'Schedule Visit',
+      'Enter preferred date and time (e.g. Tomorrow, 5 PM):',
+      async (visitTimeStr) => {
+        if (!visitTimeStr?.trim()) return;
+        try {
+          setSubmitting(true);
+          // Create a mock future date string or pass the text
+          await submitInquiry(property.id, `Scheduled visit request for: ${visitTimeStr}`, new Date().toISOString());
+          Alert.alert('Success', 'Visit request submitted successfully!');
+        } catch (error) {
+          Alert.alert('Error', error.message || 'Could not schedule visit.');
+        } finally {
+          setSubmitting(false);
+        }
+      }
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.secondary} />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.secondaryLight} />
+
 
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>{rental.type}</Text>
-          <Text style={styles.headerSub}>{rental.area}</Text>
+          <Text style={styles.headerTitle}>{property.title}</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>{property.address}</Text>
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <Text style={styles.heroIcon}>{rental.icon}</Text>
-          {rental.verified && (
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.heroIcon}>🏢</Text>
+          )}
+          {property.verification === 'VERIFIED' && (
             <View style={styles.verifiedBadge}>
               <Text style={styles.verifiedText}>Verified</Text>
             </View>
@@ -54,67 +145,110 @@ export default function RentalDetailScreen({ route, navigation }) {
 
         <View style={styles.summary}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{rental.type} in {rental.area}</Text>
-            <Text style={styles.address}>Sector road, {rental.area}</Text>
+            <Text style={styles.title}>{property.title}</Text>
+            <Text style={styles.address}>📍 {property.address}</Text>
           </View>
-          <Text style={styles.rent}>{rental.rent}</Text>
+          <Text style={styles.rent}>
+            ₹{formattedPrice}{property.mode === 'RENT' ? '/mo' : ''}
+          </Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Place Details</Text>
-          {facts.map((fact) => (
-            <View key={fact.label} style={styles.factRow}>
-              <Text style={styles.factLabel}>{fact.label}</Text>
-              <Text style={styles.factValue}>{fact.value}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Amenities</Text>
-          <View style={styles.amenitiesRow}>
-            {(rental.amenities.length ? rental.amenities : ['Call for details']).map((item) => (
-              <View key={item} style={styles.amenityChip}>
-                <Text style={styles.amenityText}>{item}</Text>
-              </View>
-            ))}
+          <View style={styles.factRow}>
+            <Text style={styles.factLabel}>Category</Text>
+            <Text style={styles.factValue}>{property.category}</Text>
+          </View>
+          <View style={styles.factRow}>
+            <Text style={styles.factLabel}>Size</Text>
+            <Text style={styles.factValue}>{property.size}</Text>
+          </View>
+          <View style={styles.factRow}>
+            <Text style={styles.factLabel}>Floor</Text>
+            <Text style={styles.factValue}>{property.floor || 'Ground'}</Text>
+          </View>
+          <View style={styles.factRow}>
+            <Text style={styles.factLabel}>Furnishing</Text>
+            <Text style={styles.factValue}>{property.furnished?.replace('_', ' ')}</Text>
           </View>
         </View>
 
+        {property.details && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Owner Notes</Text>
+            <Text style={styles.notes}>{property.details}</Text>
+          </View>
+        )}
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Owner Notes</Text>
-          <Text style={styles.notes}>
-            Suitable for local families, students, and working professionals. Final rent,
-            deposit, and move-in date can be confirmed after owner verification.
-          </Text>
+          <Text style={styles.sectionTitle}>Ask the Owner a Question</Text>
+          <TextInput
+            style={styles.messageInput}
+            placeholder="Ask about deposits, utilities, landmarks..."
+            placeholderTextColor={Colors.textMuted}
+            value={message}
+            onChangeText={setMessage}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.submitInquiryBtn, submitting && styles.btnDisabled]}
+            onPress={handleInquirySubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color={Colors.white} />
+            ) : (
+              <Text style={styles.submitInquiryBtnText}>Send Message</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.secondaryBtn}>
+        <TouchableOpacity style={styles.secondaryBtn} onPress={handleCall}>
           <Text style={styles.secondaryBtnText}>Call Owner</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.primaryBtn}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleScheduleVisit}>
           <Text style={styles.primaryBtnText}>Schedule Visit</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
+
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  loaderWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+  emptyText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+    fontWeight: '800',
+  },
   header: {
-    backgroundColor: Colors.secondary,
+    backgroundColor: Colors.secondaryLight,
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 48,
     paddingBottom: 16,
     paddingHorizontal: Spacing.lg,
     gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  headerTitle: { color: Colors.white, fontSize: FontSize.xl, fontWeight: '900' },
-  headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: FontSize.xs, fontWeight: '700', marginTop: 2 },
+  headerTitle: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '900' },
+  headerSubtitle: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700', marginTop: 2 },
   content: { padding: Spacing.lg, paddingBottom: 124 },
   hero: {
     height: 230,
@@ -123,6 +257,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.md,
+    overflow: 'hidden',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
   },
   heroIcon: { fontSize: 74 },
   verifiedBadge: {
@@ -133,6 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    zIndex: 10,
   },
   verifiedText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   summary: {
@@ -164,15 +304,36 @@ const styles = StyleSheet.create({
   },
   factLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700' },
   factValue: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
-  amenitiesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  amenityChip: {
-    backgroundColor: Colors.secondaryLight,
-    borderRadius: Radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  amenityText: { color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '900' },
   notes: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 21, fontWeight: '600' },
+  
+  messageInput: {
+    backgroundColor: Colors.gray50,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    minHeight: 84,
+    color: Colors.textPrimary,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    textAlignVertical: 'top',
+    marginBottom: Spacing.md,
+  },
+  submitInquiryBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  btnDisabled: {
+    backgroundColor: Colors.gray400,
+  },
+  submitInquiryBtnText: {
+    color: Colors.white,
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+
   bottomBar: {
     position: 'absolute',
     left: 0,

@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
+  ActivityIndicator, Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
+import { useFocusEffect } from '@react-navigation/native';
 import LogoBrand from '../components/LogoBrand';
+import { getCategories } from '../services/categories';
+import { getProducts } from '../services/products';
 
 const CATEGORIES = [
   { id: '1',  icon: '🛒', label: 'Groceries',         screen: 'Grocery',      bg: '#FFF0F0' },
@@ -29,6 +32,7 @@ const QUICK_ACTIONS = [
   { icon: '📄', label: 'Upload PDF', screen: 'PrintDeliver', color: Colors.secondaryLight },
   { icon: '⚡', label: 'Electrician', screen: 'PennyWorks', color: '#FFF3E6' },
   { icon: '📦', label: 'Send Parcel', screen: 'Parcel', color: '#F0F4FF' },
+  { icon: '🏠', label: 'Properties', screen: 'Rentals', color: '#E6FFFA' },
 ];
 
 const OFFERS = [
@@ -118,24 +122,54 @@ const TRENDING = [
 
 export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState('');
+  const [trendingProducts, setTrendingProducts] = useState([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
 
-  const openTrending = (item) => {
-    if (item.action === 'ProductDetail') {
-      navigation.navigate('ProductDetail', { product: item.product });
-      return;
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategoriesLoading(true);
+      setCategoriesError('');
+      setCategories(await getCategories());
+    } catch (error) {
+      setCategoriesError(error?.message || 'Unable to load categories');
+    } finally {
+      setCategoriesLoading(false);
     }
+  }, []);
 
-    navigation.navigate(item.action);
-  };
+  const loadTrending = useCallback(async () => {
+    try {
+      setTrendingLoading(true);
+      const response = await getProducts({ page: 1, limit: 8, trending: true, stock: 'in' });
+      setTrendingProducts(response.products);
+    } catch {
+      setTrendingProducts([]);
+    } finally {
+      setTrendingLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCategories();
+      loadTrending();
+    }, [loadCategories, loadTrending]),
+  );
+
+  const openTrending = (product) =>
+    navigation.navigate('ProductDetail', { productId: product.id, product });
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
 
       {/* ─── Top Header ─── */}
       <View style={styles.topBar}>
         <View style={styles.topLeft}>
-          <LogoBrand size="sm" onDark={true} />
+          <LogoBrand size="sm" />
           <TouchableOpacity style={styles.locationRow}>
             <Text style={styles.pinIcon}>📍</Text>
             <Text style={styles.locationText} numberOfLines={1}>Sector 14, Gurugram</Text>
@@ -222,26 +256,40 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {TRENDING.map((item) => (
+            {trendingLoading ? (
+              <View style={styles.trendingLoading}>
+                <ActivityIndicator color={Colors.primary} />
+              </View>
+            ) : null}
+            {!trendingLoading && trendingProducts.length === 0 ? (
+              <Text style={styles.trendingEmpty}>No trending products yet.</Text>
+            ) : null}
+            {trendingProducts.map((product) => (
               <TouchableOpacity
-                key={item.id}
+                key={product.id}
                 style={styles.trendingCard}
                 activeOpacity={0.84}
-                onPress={() => openTrending(item)}
+                onPress={() => openTrending(product)}
               >
-                <View style={[styles.trendingArt, { backgroundColor: item.bg }]}>
-                  <Text style={[styles.trendingInitial, { color: item.accent }]}>
-                    {item.title.charAt(0)}
-                  </Text>
-                  <View style={[styles.trendingTag, { backgroundColor: item.accent }]}>
-                    <Text style={styles.trendingTagText}>{item.tag}</Text>
+                <View style={[styles.trendingArt, { backgroundColor: Colors.primaryLight }]}>
+                  {product.imageUrl ? (
+                    <Image source={{ uri: product.imageUrl }} style={styles.trendingImage} />
+                  ) : (
+                    <Text style={[styles.trendingInitial, { color: Colors.primary }]}>
+                      {product.name.charAt(0)}
+                    </Text>
+                  )}
+                  <View style={[styles.trendingTag, { backgroundColor: Colors.primary }]}>
+                    <Text style={styles.trendingTagText}>{product.category || 'Product'}</Text>
                   </View>
                 </View>
-                <Text style={styles.trendingTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.trendingSub} numberOfLines={1}>{item.sub}</Text>
+                <Text style={styles.trendingTitle} numberOfLines={2}>{product.name}</Text>
+                <Text style={styles.trendingSub} numberOfLines={1}>
+                  {product.variants[0]?.label || product.brand || 'Available now'}
+                </Text>
                 <View style={styles.trendingBottom}>
-                  <Text style={[styles.trendingPrice, { color: item.accent }]}>
-                    Rs {item.price}
+                  <Text style={[styles.trendingPrice, { color: Colors.primary }]}>
+                    Rs {Number(product.price || 0).toLocaleString()}
                   </Text>
                   <Text style={styles.trendingArrow}>›</Text>
                 </View>
@@ -270,19 +318,56 @@ export default function HomeScreen({ navigation }) {
         {/* ─── Categories ─── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shop by Category</Text>
+          {categoriesLoading ? (
+            <View style={styles.categoryStatus}>
+              <ActivityIndicator color={Colors.primary} />
+              <Text style={styles.categoryStatusText}>Loading categories...</Text>
+            </View>
+          ) : categoriesError ? (
+            <View style={styles.categoryStatus}>
+              <Text style={styles.categoryStatusText}>{categoriesError}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={loadCategories}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : categories.length === 0 ? (
+            <View style={styles.categoryStatus}>
+              <Text style={styles.categoryStatusText}>No categories available yet.</Text>
+            </View>
+          ) : (
           <View style={styles.categoryGrid}>
-            {CATEGORIES.map((cat) => (
+            {categories.map((category) => (
               <TouchableOpacity
-                key={cat.id}
-                style={[styles.categoryCard, { backgroundColor: cat.bg }]}
-                onPress={() => navigation.navigate(cat.screen)}
+                key={category.id}
+                style={styles.categoryCard}
+                onPress={() =>
+                  navigation.navigate('Marketplace', {
+                    categoryId: category.id,
+                    categoryName: category.name,
+                  })
+                }
                 activeOpacity={0.78}
               >
-                <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                <Text style={styles.categoryLabel} numberOfLines={2}>{cat.label}</Text>
+                {category.imageUrl ? (
+                  <Image
+                    source={{ uri: category.imageUrl }}
+                    style={styles.categoryImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.categoryFallback}>
+                    <Text style={styles.categoryFallbackText}>
+                      {category.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.categoryLabel} numberOfLines={2}>
+                  {category.name}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
+          )}
         </View>
 
         {/* Bottom spacer for tab bar */}
@@ -297,34 +382,36 @@ const styles = StyleSheet.create({
 
   /* Top bar */
   topBar: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
     paddingTop: 50,
     paddingBottom: 14,
     paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F7D6D9',
   },
   topLeft: { flex: 1, marginRight: 8 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 3 },
   pinIcon: { fontSize: 11 },
   locationText: {
     fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.85)',
+    color: Colors.textSecondary,
     fontWeight: '600',
     flex: 1,
   },
-  chevron: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+  chevron: { color: Colors.gray600, fontSize: 11 },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   walletChip: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: Colors.white,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: '#F3B9BE',
   },
-  walletText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '800' },
+  walletText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '800' },
   iconBtn: { position: 'relative', padding: 4 },
   iconBtnText: { fontSize: 21 },
   badge: {
@@ -338,13 +425,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryLight,
   },
   badgeText: { fontSize: 8, color: Colors.white, fontWeight: '800' },
 
   /* Search */
   searchWrapper: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
     paddingHorizontal: Spacing.lg,
     paddingBottom: 14,
   },
@@ -450,6 +537,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
     position: 'relative',
+    overflow: 'hidden',
+  },
+  trendingImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  trendingLoading: {
+    width: 158,
+    minHeight: 185,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trendingEmpty: {
+    color: Colors.textMuted,
+    fontSize: FontSize.sm,
+    paddingVertical: Spacing.lg,
   },
   trendingInitial: {
     fontSize: 34,
@@ -498,9 +602,10 @@ const styles = StyleSheet.create({
   },
 
   /* Quick actions */
-  quickRow: { flexDirection: 'row', gap: 10 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   quickCard: {
-    flex: 1,
+    width: '23%',
+    minWidth: 72,
     borderRadius: Radius.md,
     padding: 12,
     alignItems: 'center',
@@ -515,18 +620,65 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryCard: {
     width: '22%',
+    backgroundColor: Colors.white,
     borderRadius: Radius.md,
-    padding: 10,
+    padding: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
     ...Shadow.xs,
   },
-  categoryIcon: { fontSize: 26, marginBottom: 5 },
+  categoryImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: Radius.sm,
+    marginBottom: 7,
+    backgroundColor: Colors.gray100,
+  },
+  categoryFallback: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: Radius.sm,
+    marginBottom: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.secondaryLight,
+  },
+  categoryFallbackText: {
+    color: Colors.secondary,
+    fontSize: FontSize.xxl,
+    fontWeight: '900',
+  },
   categoryLabel: {
     fontSize: FontSize.xxs,
     color: Colors.textSecondary,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  categoryStatus: {
+    minHeight: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  categoryStatusText: {
+    color: Colors.textMuted,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  retryButtonText: {
+    color: Colors.white,
+    fontSize: FontSize.xs,
+    fontWeight: '800',
   },
 });

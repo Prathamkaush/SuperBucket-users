@@ -3,12 +3,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import SplashScreen      from './screens/SplashScreen';
 import LoginScreen       from './screens/LoginScreen';
 import LocationScreen    from './screens/LocationScreen';
 import HomeScreen        from './screens/HomeScreen';
-import GroceryScreen     from './screens/GroceryScreen';
 import CartScreen        from './screens/CartScreen';
 import WalletScreen      from './screens/WalletScreen';
 import ParcelScreen      from './screens/ParcelScreen';
@@ -21,6 +21,7 @@ import ProductDetailScreen from './screens/ProductDetailScreen';
 import OrderTrackingScreen from './screens/OrderTrackingScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfileScreen     from './screens/ProfileScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
 
 import { Colors } from './theme/theme';
 
@@ -46,15 +47,24 @@ function TabIcon({ icon, focused, label }) {
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: tabStyles.tabBar,
+        tabBarStyle: [
+          tabStyles.tabBar,
+          {
+            height: 62 + bottomInset,
+            paddingBottom: bottomInset,
+          },
+        ],
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.gray500,
         tabBarLabelStyle: tabStyles.label,
-        tabBarItemStyle: { paddingVertical: 4 },
+        tabBarItemStyle: tabStyles.tabItem,
       }}
     >
       <Tab.Screen
@@ -67,10 +77,10 @@ function MainTabs() {
       />
       <Tab.Screen
         name="Grocery"
-        component={GroceryScreen}
+        component={MarketplaceScreen}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon icon="🛒" focused={focused} />,
-          tabBarLabel: 'Grocery',
+          tabBarLabel: 'Shop',
         }}
       />
       <Tab.Screen
@@ -128,6 +138,7 @@ export default function UserApp() {
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
         <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -137,14 +148,15 @@ const tabStyles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 0,
-    height: 72,
-    paddingBottom: 10,
     paddingTop: 6,
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.10,
     shadowRadius: 16,
+  },
+  tabItem: {
+    paddingTop: 4,
   },
   label: {
     fontSize: 10,

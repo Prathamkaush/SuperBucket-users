@@ -46,7 +46,7 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -112,13 +112,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 52,
     paddingBottom: 16,
     paddingHorizontal: Spacing.lg,
     gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   backBtn: {
     width: 36, height: 36, borderRadius: Radius.sm,
@@ -126,7 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   backArrow: { fontSize: 20, color: Colors.white, fontWeight: '700' },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
   unreadBadge: {
     marginTop: 4,
     backgroundColor: Colors.secondary,
@@ -139,11 +141,11 @@ const styles = StyleSheet.create({
   markAllBtn: {
     paddingHorizontal: 10, paddingVertical: 7,
     borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: '#F3B9BE',
   },
-  markAllText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '700' },
+  markAllText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '700' },
 
   sectionLabel: {
     fontSize: FontSize.xxs,

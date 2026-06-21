@@ -45,7 +45,7 @@ export default function PennyWorksScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -169,13 +169,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 52,
     paddingBottom: 16,
     paddingHorizontal: Spacing.lg,
     gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   backBtn: {
     width: 36,
@@ -186,8 +188,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   backArrow: { fontSize: 20, color: Colors.white, fontWeight: '700' },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white },
-  headerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
+  headerSub: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
   headerBadge: {
     backgroundColor: Colors.success,
     paddingHorizontal: 12,
