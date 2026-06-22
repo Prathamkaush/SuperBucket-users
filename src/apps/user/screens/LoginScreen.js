@@ -196,7 +196,16 @@ export default function LoginScreen({ navigation }) {
 
       let message = error?.message || 'Unable to sign in with Google';
       if (isErrorWithCode(error)) {
-        if (error.code === statusCodes.IN_PROGRESS) {
+        const errorCode = String(error.code);
+
+        if (
+          Platform.OS === 'android' &&
+          (errorCode === '10' ||
+            /developer_error|non-recoverable/i.test(error?.message || ''))
+        ) {
+          message =
+            'This Android build is not registered with Google. Add the SHA-1 of the certificate that signed this APK to an Android OAuth client for package com.superbuket.user, in the same Google Cloud project as the Web client ID, then rebuild the app.';
+        } else if (error.code === statusCodes.IN_PROGRESS) {
           message = 'Google sign-in is already in progress';
         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
           message = 'Google Play Services is unavailable or out of date';

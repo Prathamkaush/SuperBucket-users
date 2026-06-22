@@ -6,11 +6,19 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://apiv1.freeqr.live",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "834694335000-k6g8sv5r87ql1madc99u77d6csfefe83.apps.googleusercontent.com"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://apiv1.freeqr.live",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "834694335000-k6g8sv5r87ql1madc99u77d6csfefe83.apps.googleusercontent.com"
+      },
       "android": {
         "buildType": "app-bundle"
       }

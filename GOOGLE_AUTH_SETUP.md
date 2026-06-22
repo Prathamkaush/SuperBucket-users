@@ -19,6 +19,42 @@ Use one Google Cloud project for the backend and mobile applications.
    - EAS development/preview upload certificate
    - Google Play App Signing certificate for store builds
 
+The package name and SHA-1 are a pair. A correct Web client ID alone is not
+enough: if the certificate that signed the installed APK is missing, Android
+opens the account chooser and then returns error code `10` (`DEVELOPER_ERROR`),
+which may be displayed as "A non-recoverable sign in failure occurred."
+
+### Get the SHA-1 for the EAS preview APK
+
+From `user-application`, run:
+
+```bash
+npx eas-cli@latest credentials --platform android
+```
+
+Select the `preview` build profile, then view/download the Android keystore.
+Copy the SHA-1 shown by EAS. If EAS does not display it, download the keystore
+and run:
+
+```bash
+keytool -list -v -keystore YOUR_KEYSTORE.jks -alias YOUR_KEY_ALIAS
+```
+
+In Google Cloud Console, open **APIs & Services > Credentials**, create an
+**Android** OAuth client in the same project as the Web OAuth client, and enter:
+
+- Package name: `com.superbuket.user`
+- SHA-1: the EAS certificate fingerprint (without changing it)
+
+For an app installed from Google Play, also create an Android OAuth client for
+the **App signing key certificate** SHA-1 shown under **Play Console > Setup >
+App integrity**. The upload-key SHA-1 and Play app-signing SHA-1 are normally
+different.
+
+After adding the credential, wait a few minutes, uninstall the old app, create
+a new preview build, and install it. Confirm that the Web client ID configured
+below belongs to that same Google Cloud project.
+
 The Android client ID identifies the native application. The Web client ID is
 still required because Google issues the ID token for the backend audience.
 

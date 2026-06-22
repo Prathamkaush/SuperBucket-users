@@ -10,7 +10,10 @@ export async function apiRequest(path, options = {}) {
     const message = Array.isArray(data?.message)
       ? data.message.join(', ')
       : data?.message;
-    throw new Error(message || `Request failed with status ${response.status}`);
+    const error = new Error(message || `Request failed with status ${response.status}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;

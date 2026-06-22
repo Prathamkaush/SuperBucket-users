@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { Colors, FontSize } from '../theme/theme';
 import LogoBrand from '../components/LogoBrand';
+import { clearAuth, getAuthToken } from '../services/auth';
+import { getAddresses } from '../services/addresses';
 
 const { width } = Dimensions.get('window');
 
@@ -37,7 +39,31 @@ export default function SplashScreen({ navigation }) {
   const serviceOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
+    let mounted = true;
+    let navigationTimer;
+
+    const resolveDestination = async () => {
+      const token = await getAuthToken();
+      if (!token) return 'Login';
+
+      try {
+        const addresses = await getAddresses();
+        return Array.isArray(addresses) && addresses.length > 0
+          ? 'MainTabs'
+          : 'Location';
+      } catch (error) {
+        if (error?.status === 401 || error?.status === 403) {
+          await clearAuth();
+          return 'Login';
+        }
+
+        // Keep a saved session usable when the local API is temporarily offline.
+        return 'MainTabs';
+      }
+    };
+
+    const destinationPromise = resolveDestination();
+    const animation = Animated.sequence([
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
@@ -93,11 +119,20 @@ export default function SplashScreen({ navigation }) {
           useNativeDriver: true,
         }),
       ]),
-    ]).start(() => {
-      setTimeout(() => {
-        navigation.replace('Login');
+    ]);
+
+    animation.start(() => {
+      navigationTimer = setTimeout(async () => {
+        const destination = await destinationPromise;
+        if (mounted) navigation.replace(destination);
       }, 650);
     });
+
+    return () => {
+      mounted = false;
+      if (navigationTimer) clearTimeout(navigationTimer);
+      animation.stop();
+    };
   }, [
     brandScale,
     lineScale,
