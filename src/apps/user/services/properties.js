@@ -6,6 +6,7 @@ export function getLiveProperties(params = {}) {
   if (params.category) query.append('category', params.category);
   if (params.mode) query.append('mode', params.mode);
   if (params.search) query.append('search', params.search);
+  if (params.pincode) query.append('pincode', params.pincode);
   if (params.page) query.append('page', params.page);
   if (params.limit) query.append('limit', params.limit);
 

@@ -13,11 +13,14 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getPropertyDetail, submitInquiry } from '../services/properties';
 import { getUploadUrl } from '../services/api';
+
+const PHOTO_WIDTH = Dimensions.get('window').width - (Spacing.lg * 2);
 
 export default function RentalDetailScreen({ route, navigation }) {
   const { rentalId } = route.params || {};
@@ -61,7 +64,9 @@ export default function RentalDetailScreen({ route, navigation }) {
     );
   }
 
-  const imageUrl = property.frontImage ? getUploadUrl('properties', property.frontImage) : null;
+  const propertyImages = [property.frontImage, property.roomsImage]
+    .filter(Boolean)
+    .map((fileName) => getUploadUrl('properties', fileName));
   const formattedPrice = parseFloat(property.price).toLocaleString('en-IN');
 
   const handleCall = () => {
@@ -131,10 +136,19 @@ export default function RentalDetailScreen({ route, navigation }) {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          {propertyImages.length ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {propertyImages.map((imageUrl) => (
+                <Image key={imageUrl} source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+              ))}
+            </ScrollView>
           ) : (
             <Text style={styles.heroIcon}>🏢</Text>
+          )}
+          {propertyImages.length > 1 && (
+            <View style={styles.photoCountBadge}>
+              <Text style={styles.photoCountText}>{propertyImages.length} photos · swipe</Text>
+            </View>
           )}
           {property.verification === 'VERIFIED' && (
             <View style={styles.verifiedBadge}>
@@ -260,9 +274,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heroImage: {
-    width: '100%',
+    width: PHOTO_WIDTH,
     height: '100%',
   },
+  photoCountBadge: {
+    position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.68)',
+    borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  photoCountText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '800' },
   heroIcon: { fontSize: 74 },
   verifiedBadge: {
     position: 'absolute',

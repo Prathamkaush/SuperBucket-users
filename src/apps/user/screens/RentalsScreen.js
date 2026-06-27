@@ -7,6 +7,7 @@ import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getLiveProperties } from '../services/properties';
 import { getUploadUrl } from '../services/api';
+import { getAddresses } from '../services/addresses';
 
 const FILTERS = ['All', 'Residential', 'Commercial', 'Hostel', 'Land', 'Warehouse'];
 
@@ -22,11 +23,28 @@ export default function RentalsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
+  const [nearbyProperties, setNearbyProperties] = useState([]);
+  const [userPincode, setUserPincode] = useState('');
 
   const loadProperties = useCallback(async () => {
     try {
       const response = await getLiveProperties();
       setProperties(response.properties || []);
+
+      try {
+        const addresses = await getAddresses();
+        const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0];
+        if (defaultAddress?.pincode) {
+          setUserPincode(defaultAddress.pincode);
+          const nearbyResponse = await getLiveProperties({
+            pincode: defaultAddress.pincode,
+            limit: 20,
+          });
+          setNearbyProperties(nearbyResponse.properties || []);
+        }
+      } catch (addressError) {
+        console.log('Could not load nearby properties:', addressError);
+      }
     } catch (error) {
       console.log('Error loading properties:', error);
     } finally {
@@ -91,6 +109,34 @@ export default function RentalsScreen({ navigation }) {
           contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 50, gap: 16 }}
           showsVerticalScrollIndicator={false}
         >
+          {nearbyProperties.length > 0 && (
+            <View style={styles.sponsoredSection}>
+              <Text style={styles.sponsoredSectionTitle}>Properties Near Me</Text>
+              <Text style={styles.nearbyHint}>Around PIN {userPincode}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sponsoredContent}>
+                {nearbyProperties.map((nearby) => {
+                  const nearbyImage = nearby.frontImage ? getUploadUrl('properties', nearby.frontImage) : null;
+                  return (
+                    <TouchableOpacity
+                      key={`near-${nearby.id}`}
+                      style={styles.adCard}
+                      onPress={() => navigation.navigate('RentalDetail', { rentalId: nearby.id })}
+                    >
+                      <View style={[styles.adImageWrap, { backgroundColor: Colors.secondaryLight }]}>
+                        {nearbyImage ? <Image source={{ uri: nearbyImage }} style={styles.adImage} /> : <Text style={styles.adEmoji}>🏠</Text>}
+                      </View>
+                      <View style={styles.adInfo}>
+                        <Text style={styles.adTitle} numberOfLines={1}>{nearby.title}</Text>
+                        <Text style={styles.adRent}>₹{parseFloat(nearby.price).toLocaleString('en-IN')}{nearby.mode === 'RENT' ? '/mo' : ''}</Text>
+                        <Text style={styles.adArea} numberOfLines={1}>PIN {nearby.pincode} · {nearby.address}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Sponsored Ads Section */}
           {sponsored.length > 0 && (
             <View style={styles.sponsoredSection}>
@@ -361,6 +407,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     letterSpacing: 0.2,
   },
+  nearbyHint: {
+    color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '600', marginTop: -6, marginBottom: 10,
+  },
   sponsoredContent: {
     gap: 12,
     paddingBottom: 4,
@@ -433,4 +482,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

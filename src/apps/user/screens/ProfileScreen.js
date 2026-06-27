@@ -22,6 +22,8 @@ const MENU_ITEMS = [
   { label: 'Saved Addresses', screen: 'Location', icon: 'A' },
   { label: 'Order History', screen: 'OrderTracking', icon: 'O' },
   { label: 'Service Bookings', screen: 'ServiceBookings', icon: 'S' },
+  { label: 'My Properties', screen: 'RenterPortal', icon: 'R' },
+  { label: 'Provider Dashboard', screen: 'ProviderPortal', icon: 'Rs' },
   { label: 'My Wallet', screen: 'Wallet', icon: 'W' },
   { label: 'Help Center', screen: null, icon: '?' },
   { label: 'Logout', screen: 'Login', icon: 'L', danger: true },
@@ -170,8 +172,12 @@ export default function ProfileScreen({ navigation }) {
                     ? 'Update your name, email, and phone'
                     : item.label === 'Order History'
                       ? `${orderCount} orders placed`
-                      : item.label === 'Service Bookings'
+                    : item.label === 'Service Bookings'
                         ? 'Track jobs and rate service partners'
+                      : item.label === 'My Properties'
+                        ? 'Add listings, leads, and property earnings'
+                      : item.label === 'Provider Dashboard'
+                        ? 'Manage services, jobs, and payouts'
                       : item.label === 'Saved Addresses'
                         ? 'Manage delivery locations'
                         : item.label === 'My Wallet'

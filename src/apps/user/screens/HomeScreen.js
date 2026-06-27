@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator, Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
 } from 'react-native';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import LogoBrand from '../components/LogoBrand';
@@ -28,12 +29,19 @@ const CATEGORIES = [
 ];
 
 const QUICK_ACTIONS = [
-  { icon: '🔁', label: 'Reorder', screen: 'Cart', color: Colors.primaryLight },
-  { icon: '📄', label: 'Upload PDF', screen: 'PrintDeliver', color: Colors.secondaryLight },
-  { icon: '⚡', label: 'Electrician', screen: 'PennyWorks', color: '#FFF3E6' },
-  { icon: '📦', label: 'Send Parcel', screen: 'Parcel', color: '#F0F4FF' },
-  { icon: '🏠', label: 'Properties', screen: 'Rentals', color: '#E6FFFA' },
+  { icon: 'megaphone', iconSet: 'Feather', label: 'Advertise Business', screen: 'AdvertiseBusiness', color: Colors.primaryLight, iconColor: Colors.primary },
+  { icon: 'file-text', iconSet: 'Feather', label: 'Print & Deliver', screen: 'PrintDeliver', color: Colors.secondaryLight, iconColor: Colors.secondary },
+  { icon: 'tool', iconSet: 'Feather', label: 'Penny Works', screen: 'PennyWorks', color: '#FFF3E6', iconColor: Colors.accent },
+  { icon: 'package', iconSet: 'Feather', label: 'Send Parcel', screen: 'Parcel', color: '#F0F4FF', iconColor: '#4F46E5' },
+  { icon: 'home-city-outline', iconSet: 'MaterialCommunityIcons', label: 'Properties', screen: 'Rentals', color: '#E6FFFA', iconColor: Colors.success },
+  { icon: 'home-plus-outline', iconSet: 'MaterialCommunityIcons', label: 'List Property', screen: 'RenterPortal', color: '#EEF2FF', iconColor: '#4F46E5' },
+  { icon: 'briefcase', iconSet: 'Feather', label: 'Provide Services', screen: 'ProviderPortal', color: '#ECFDF5', iconColor: Colors.success },
 ];
+
+function ActionIcon({ action, size = 24 }) {
+  const Icon = action.iconSet === 'MaterialCommunityIcons' ? MaterialCommunityIcons : Feather;
+  return <Icon name={action.icon} size={size} color={action.iconColor} />;
+}
 
 const OFFERS = [
   {
@@ -308,7 +316,9 @@ export default function HomeScreen({ navigation }) {
                 activeOpacity={0.8}
                 onPress={() => navigation.navigate(action.screen)}
               >
-                <Text style={styles.quickIcon}>{action.icon}</Text>
+                <View style={styles.quickIcon}>
+                  <ActionIcon action={action} />
+                </View>
                 <Text style={styles.quickLabel}>{action.label}</Text>
               </TouchableOpacity>
             ))}
@@ -392,6 +402,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F7D6D9',
   },
+
   topLeft: { flex: 1, marginRight: 8 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 3 },
   pinIcon: { fontSize: 11 },
@@ -602,19 +613,35 @@ const styles = StyleSheet.create({
   },
 
   /* Quick actions */
-  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 },
   quickCard: {
-    width: '23%',
-    minWidth: 72,
+    width: '48%',
+    minHeight: 82,
     borderRadius: Radius.md,
-    padding: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 11,
     borderWidth: 1,
     borderColor: Colors.border,
     ...Shadow.xs,
   },
-  quickIcon: { fontSize: 24, marginBottom: 6 },
-  quickLabel: { fontSize: FontSize.xxs, color: Colors.textSecondary, textAlign: 'center', fontWeight: '700' },
+  quickIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  quickLabel: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
 
   /* Category grid */
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
