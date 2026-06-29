@@ -20,6 +20,7 @@ import RentalsScreen     from './screens/RentalsScreen';
 import RentalDetailScreen from './screens/RentalDetailScreen';
 import MarketplaceScreen from './screens/MarketplaceScreen';
 import ProductDetailScreen from './screens/ProductDetailScreen';
+import OrdersScreen from './screens/OrdersScreen';
 import OrderTrackingScreen from './screens/OrderTrackingScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfileScreen     from './screens/ProfileScreen';
@@ -285,6 +286,7 @@ export default function UserApp() {
         <Stack.Screen name="RentalDetail"  component={RentalDetailScreen} />
         <Stack.Screen name="Marketplace"   component={MarketplaceScreen} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+        <Stack.Screen name="Orders"        component={OrdersScreen} />
         <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="EditProfile"   component={EditProfileScreen} />

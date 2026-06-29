@@ -1,0 +1,103 @@
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import BackButton from '../components/BackButton';
+import { getMyOrders } from '../services/orders';
+import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
+
+const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
+
+export default function OrdersScreen({ navigation }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await getMyOrders();
+      setOrders(data.orders || []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  return (
+    <View style={styles.page}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
+      <View style={styles.header}>
+        <BackButton onPress={() => navigation.goBack()} />
+        <View>
+          <Text style={styles.title}>Your Orders</Text>
+          <Text style={styles.sub}>{orders.length} recent orders</Text>
+        </View>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
+        >
+          {orders.map((order) => (
+            <TouchableOpacity
+              key={order.id}
+              style={styles.card}
+              activeOpacity={0.86}
+              onPress={() => navigation.navigate('OrderTracking', { orderId: order.id, order })}
+            >
+              <View style={styles.row}>
+                <Text style={styles.orderId}>Order #{order.id}</Text>
+                <Text style={[styles.badge, statusStyle(order.status)]}>{order.status}</Text>
+              </View>
+              <Text style={styles.date}>{new Date(order.createdAt).toLocaleString()}</Text>
+              <Text style={styles.slot}>{order.deliverySlotLabel || 'Instant delivery'}</Text>
+              <Text style={styles.itemText} numberOfLines={1}>
+                {(order.items || []).map((item) => `${item.product?.title || 'Product'} x ${item.quantity}`).join(', ')}
+              </Text>
+              <View style={styles.bottomRow}>
+                <Text style={styles.total}>{money(order.finalAmount)}</Text>
+                {order.deliveryOtp && order.status !== 'DELIVERED' ? (
+                  <Text style={styles.otp}>OTP {order.deliveryOtp}</Text>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          ))}
+          {!orders.length ? <Text style={styles.empty}>No orders yet.</Text> : null}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function statusStyle(status) {
+  if (status === 'DELIVERED') return styles.delivered;
+  if (status === 'SHIPPED') return styles.shipped;
+  if (status === 'CANCELLED') return styles.cancelled;
+  return styles.pending;
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: Colors.background },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg, backgroundColor: Colors.primaryLight, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  title: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '800' },
+  sub: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 2 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  list: { padding: Spacing.lg, paddingBottom: 50 },
+  card: { backgroundColor: Colors.white, borderRadius: Radius.md, padding: 16, marginBottom: 12, ...Shadow.sm },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  orderId: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' },
+  badge: { overflow: 'hidden', borderRadius: Radius.full, paddingHorizontal: 9, paddingVertical: 4, color: Colors.white, fontSize: FontSize.xxs, fontWeight: '900' },
+  pending: { backgroundColor: Colors.warning },
+  shipped: { backgroundColor: Colors.secondary },
+  delivered: { backgroundColor: Colors.success },
+  cancelled: { backgroundColor: Colors.danger },
+  date: { marginTop: 7, color: Colors.textMuted, fontSize: FontSize.xs },
+  slot: { marginTop: 5, color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '800' },
+  itemText: { marginTop: 8, color: Colors.textSecondary, fontSize: FontSize.sm },
+  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+  total: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '900' },
+  otp: { color: Colors.textPrimary, backgroundColor: Colors.warningLight, borderRadius: Radius.sm, paddingHorizontal: 9, paddingVertical: 5, fontSize: FontSize.xs, fontWeight: '900' },
+  empty: { color: Colors.textMuted, textAlign: 'center', marginTop: 60 },
+});

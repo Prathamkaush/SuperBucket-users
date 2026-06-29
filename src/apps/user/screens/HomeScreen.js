@@ -29,7 +29,7 @@ const CATEGORIES = [
 ];
 
 const QUICK_ACTIONS = [
-  { icon: 'megaphone', iconSet: 'Feather', label: 'Advertise Business', screen: 'AdvertiseBusiness', color: Colors.primaryLight, iconColor: Colors.primary },
+  { icon: 'bullhorn', iconSet: 'MaterialCommunityIcons', label: 'Advertise Business', screen: 'AdvertiseBusiness', color: Colors.primaryLight, iconColor: Colors.primary },
   { icon: 'file-text', iconSet: 'Feather', label: 'Print & Deliver', screen: 'PrintDeliver', color: Colors.secondaryLight, iconColor: Colors.secondary },
   { icon: 'tool', iconSet: 'Feather', label: 'Penny Works', screen: 'PennyWorks', color: '#FFF3E6', iconColor: Colors.accent },
   { icon: 'package', iconSet: 'Feather', label: 'Send Parcel', screen: 'Parcel', color: '#F0F4FF', iconColor: '#4F46E5' },

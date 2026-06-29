@@ -1,5 +1,8 @@
 import { apiRequest, getUploadUrl } from './api';
 
+const productListCache = new Map();
+const PRODUCT_LIST_CACHE_MS = 60 * 1000;
+
 function mapVariant(variant) {
   const attributes = Array.isArray(variant.attributes)
     ? variant.attributes
@@ -74,28 +77,39 @@ export function mapProduct(product) {
 
 export async function getProducts(params = {}) {
   const search = new URLSearchParams();
+  const nextParams = { compact: true, fast: true, ...params };
 
-  Object.entries(params).forEach(([key, value]) => {
+  Object.entries(nextParams).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
       search.set(key, String(value));
     }
   });
 
   const query = search.toString();
-  const response = await apiRequest(`/products${query ? `?${query}` : ''}`);
+  const path = `/products${query ? `?${query}` : ''}`;
+  const cached = productListCache.get(path);
 
-  return {
+  if (cached && Date.now() - cached.createdAt < PRODUCT_LIST_CACHE_MS) {
+    return cached.data;
+  }
+
+  const response = await apiRequest(path, { timeoutMs: 12000 });
+  const data = {
     ...response,
     products: (response?.products || []).map(mapProduct),
   };
+
+  productListCache.set(path, { createdAt: Date.now(), data });
+
+  return data;
 }
 
 export async function getProduct(identifier) {
-  return mapProduct(await apiRequest(`/products/${identifier}`));
+  return mapProduct(await apiRequest(`/products/${identifier}`, { timeoutMs: 12000 }));
 }
 
 export async function getProductTypes(categoryId) {
   const query = categoryId ? `?categoryId=${categoryId}` : '';
-  const response = await apiRequest(`/product-types${query}`);
+  const response = await apiRequest(`/product-types${query}`, { timeoutMs: 8000 });
   return Array.isArray(response) ? response : response ? [response] : [];
 }

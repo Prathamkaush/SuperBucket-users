@@ -14,18 +14,48 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getCart, removeCartItem, updateCartItem } from '../services/cart';
+import { getAddresses } from '../services/addresses';
+import { placeOrder } from '../services/orders';
+import { getSettings } from '../services/settings';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
+const DAY_OPTIONS = [
+  { label: 'Today', offset: 0 },
+  { label: 'Tomorrow', offset: 1 },
+  { label: 'Day after tomorrow', offset: 2 },
+];
+const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
 export default function CartScreen({ navigation }) {
   const [items, setItems] = useState([]);
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [deliveryMode, setDeliveryMode] = useState('INSTANT');
+  const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+  const [slotTimes, setSlotTimes] = useState(DEFAULT_SLOT_TIMES);
+  const [selectedSlot, setSelectedSlot] = useState(DEFAULT_SLOT_TIMES[0]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
+  const [placing, setPlacing] = useState(false);
 
   const loadCart = useCallback(async () => {
     try {
-      const cartItems = await getCart();
+      const [cartItems, savedAddresses, settings] = await Promise.all([
+        getCart(),
+        getAddresses().catch(() => []),
+        getSettings().catch(() => ({})),
+      ]);
       setItems(cartItems);
+      setAddresses(savedAddresses);
+      const times = Array.isArray(settings.deliverySlotTimes) && settings.deliverySlotTimes.length
+        ? settings.deliverySlotTimes
+        : DEFAULT_SLOT_TIMES;
+      setSlotTimes(times);
+      setSelectedSlot((current) => (times.includes(current) ? current : times[0]));
+      setSelectedAddressId((current) => {
+        if (savedAddresses.some((address) => address.id === current)) return current;
+        return (savedAddresses.find((address) => address.isDefault) || savedAddresses[0])?.id || null;
+      });
     } catch (error) {
       Alert.alert('Could not load cart', error?.message || 'Please try again');
     } finally {
@@ -76,6 +106,42 @@ export default function CartScreen({ navigation }) {
     [items],
   );
   const total = totals.subtotal + totals.gst;
+  const selectedAddress = addresses.find((address) => address.id === selectedAddressId);
+
+  const handleCheckout = async () => {
+    if (!addresses.length) {
+      navigation.navigate('Location', { returnToCart: true });
+      return;
+    }
+
+    if (!selectedAddressId) {
+      Alert.alert('Select address', 'Choose where this order should be delivered.');
+      return;
+    }
+
+    try {
+      setPlacing(true);
+      const scheduled = deliveryMode === 'SCHEDULED'
+        ? buildScheduledSlot(selectedDayOffset, selectedSlot)
+        : null;
+      const order = await placeOrder({
+        addressId: selectedAddressId,
+        paymentMethod: 'COD',
+        deliveryMode,
+        scheduledDeliveryAt: scheduled?.date.toISOString(),
+        deliverySlotLabel: scheduled?.label,
+      });
+      Alert.alert(
+        'Order placed',
+        `Your order #${order.orderId} has been placed successfully.\n\nDelivery OTP: ${order.deliveryOtp}\nShare this OTP only when the order reaches you.`,
+        [{ text: 'Track order', onPress: () => navigation.getParent()?.navigate('OrderTracking', { order }) }],
+      );
+    } catch (error) {
+      Alert.alert('Could not place order', error?.message || 'Please try again');
+    } finally {
+      setPlacing(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -163,6 +229,92 @@ export default function CartScreen({ navigation }) {
             </View>
 
             <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Deliver to</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Location', { returnToCart: true, addNew: true })}
+                >
+                  <Text style={styles.linkText}>{addresses.length ? 'Add new' : 'Add address'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {addresses.length ? (
+                addresses.map((address) => {
+                  const active = address.id === selectedAddressId;
+                  return (
+                    <TouchableOpacity
+                      key={address.id}
+                      style={[styles.addressCard, active && styles.addressCardActive]}
+                      activeOpacity={0.86}
+                      onPress={() => setSelectedAddressId(address.id)}
+                    >
+                      <View style={styles.addressTopRow}>
+                        <Text style={styles.addressName}>{address.name} · {address.phone}</Text>
+                        {active ? <Text style={styles.selectedBadge}>Selected</Text> : null}
+                      </View>
+                      <Text style={styles.addressText}>
+                        {address.street}, {address.city}, {address.state} {address.pincode}
+                      </Text>
+                      {address.isDefault ? <Text style={styles.defaultBadge}>Default address</Text> : null}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyAddressCard}>
+                  <Text style={styles.emptyAddressTitle}>No saved address</Text>
+                  <Text style={styles.emptyAddressText}>Add a delivery address once and reuse it for checkout.</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Delivery speed</Text>
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  style={[styles.modeCard, deliveryMode === 'INSTANT' && styles.modeCardActive]}
+                  onPress={() => setDeliveryMode('INSTANT')}
+                >
+                  <Text style={styles.modeTitle}>Instant</Text>
+                  <Text style={styles.modeSub}>10-15 min after dispatch</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeCard, deliveryMode === 'SCHEDULED' && styles.modeCardActive]}
+                  onPress={() => setDeliveryMode('SCHEDULED')}
+                >
+                  <Text style={styles.modeTitle}>Schedule</Text>
+                  <Text style={styles.modeSub}>Pick a day and time</Text>
+                </TouchableOpacity>
+              </View>
+
+              {deliveryMode === 'SCHEDULED' ? (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    {DAY_OPTIONS.map((day) => (
+                      <TouchableOpacity
+                        key={day.offset}
+                        style={[styles.chip, selectedDayOffset === day.offset && styles.chipActive]}
+                        onPress={() => setSelectedDayOffset(day.offset)}
+                      >
+                        <Text style={[styles.chipText, selectedDayOffset === day.offset && styles.chipTextActive]}>{day.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    {slotTimes.map((slot) => (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[styles.chip, selectedSlot === slot && styles.chipActive]}
+                        onPress={() => setSelectedSlot(slot)}
+                      >
+                        <Text style={[styles.chipText, selectedSlot === slot && styles.chipTextActive]}>{slot}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : null}
+            </View>
+
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>Bill Summary</Text>
               <View style={styles.billCard}>
                 <View style={styles.billRow}>
@@ -179,6 +331,20 @@ export default function CartScreen({ navigation }) {
                   <Text style={styles.billLabel}>Delivery</Text>
                   <Text style={styles.deliveryText}>Calculated at checkout</Text>
                 </View>
+                {selectedAddress ? (
+                  <View style={styles.billRow}>
+                    <Text style={styles.billLabel}>Ship to</Text>
+                    <Text style={styles.billValue}>{selectedAddress.pincode}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.billRow}>
+                  <Text style={styles.billLabel}>Delivery slot</Text>
+                  <Text style={styles.billValue}>
+                    {deliveryMode === 'SCHEDULED'
+                      ? buildScheduledSlot(selectedDayOffset, selectedSlot).label
+                      : 'Instant delivery'}
+                  </Text>
+                </View>
                 <View style={[styles.billRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>Cart total</Text>
                   <Text style={styles.totalValue}>{money(total)}</Text>
@@ -193,19 +359,40 @@ export default function CartScreen({ navigation }) {
               <Text style={styles.footerSub}>Before delivery charges</Text>
             </View>
             <TouchableOpacity
-              style={styles.checkoutButton}
-              onPress={() =>
-                navigation.navigate('Location', { returnToCart: true })
-              }
+              style={[styles.checkoutButton, placing && styles.checkoutDisabled]}
+              disabled={placing}
+              onPress={handleCheckout}
               activeOpacity={0.85}
             >
-              <Text style={styles.checkoutText}>CONTINUE</Text>
+              {placing ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={styles.checkoutText}>
+                  {addresses.length ? 'PLACE ORDER' : 'ADD ADDRESS'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </>
       )}
     </View>
   );
+}
+
+function buildScheduledSlot(offset, timeLabel) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  const match = String(timeLabel || '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match) {
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const meridian = match[3].toUpperCase();
+    if (meridian === 'PM' && hours !== 12) hours += 12;
+    if (meridian === 'AM' && hours === 12) hours = 0;
+    date.setHours(hours, minutes, 0, 0);
+  }
+  const dayLabel = DAY_OPTIONS.find((day) => day.offset === offset)?.label || 'Scheduled';
+  return { date, label: `${dayLabel}, ${timeLabel}` };
 }
 
 const styles = StyleSheet.create({
@@ -224,7 +411,9 @@ const styles = StyleSheet.create({
   itemCount: { color: Colors.textMuted, fontSize: FontSize.sm },
   content: { paddingBottom: 130 },
   section: { marginTop: 16, paddingHorizontal: Spacing.lg },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   sectionTitle: { marginBottom: 10, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '700' },
+  linkText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '800' },
   cartItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,6 +423,41 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     ...Shadow.sm,
   },
+  addressCard: {
+    marginBottom: 8,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.white,
+    ...Shadow.sm,
+  },
+  addressCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  addressTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  addressName: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800' },
+  addressText: { marginTop: 5, color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 18 },
+  selectedBadge: { color: Colors.primary, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  defaultBadge: { marginTop: 8, color: Colors.success, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  emptyAddressCard: {
+    padding: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.white,
+  },
+  emptyAddressTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800' },
+  emptyAddressText: { marginTop: 4, color: Colors.textMuted, fontSize: FontSize.xs, lineHeight: 18 },
+  modeRow: { flexDirection: 'row', gap: 10 },
+  modeCard: { flex: 1, borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, padding: 13, backgroundColor: Colors.white },
+  modeCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  modeTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
+  modeSub: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 4, lineHeight: 17 },
+  chipRow: { gap: 8, paddingTop: 12 },
+  chip: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Colors.white },
+  chipActive: { borderColor: Colors.secondary, backgroundColor: Colors.secondaryLight },
+  chipText: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '800' },
+  chipTextActive: { color: Colors.secondary },
   itemImageBox: {
     width: 58,
     height: 58,
@@ -304,5 +528,6 @@ const styles = StyleSheet.create({
   footerTotal: { color: Colors.primary, fontSize: FontSize.xxl, fontWeight: '800' },
   footerSub: { color: Colors.textMuted, fontSize: FontSize.xs },
   checkoutButton: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: Radius.md, backgroundColor: Colors.primary },
+  checkoutDisabled: { opacity: 0.65 },
   checkoutText: { color: Colors.white, fontSize: FontSize.md, fontWeight: '800', letterSpacing: 1 },
 });

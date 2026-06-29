@@ -20,7 +20,7 @@ import { getProfile, getProfileStats } from '../services/profile';
 const MENU_ITEMS = [
   { label: 'Edit Profile', screen: 'EditProfile', icon: 'P' },
   { label: 'Saved Addresses', screen: 'Location', icon: 'A' },
-  { label: 'Order History', screen: 'OrderTracking', icon: 'O' },
+  { label: 'Order History', screen: 'Orders', icon: 'O' },
   { label: 'Service Bookings', screen: 'ServiceBookings', icon: 'S' },
   { label: 'My Properties', screen: 'RenterPortal', icon: 'R' },
   { label: 'Provider Dashboard', screen: 'ProviderPortal', icon: 'Rs' },

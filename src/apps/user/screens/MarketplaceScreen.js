@@ -85,6 +85,7 @@ export default function MarketplaceScreen({ navigation, route }) {
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [filterVisible, setFilterVisible] = useState(false);
   const [search, setSearch] = useState('');
+  const [submittedSearch, setSubmittedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -98,10 +99,10 @@ export default function MarketplaceScreen({ navigation, route }) {
       setError('');
       const response = await getProducts({
         page: 1,
-        limit: 50,
+        limit: 20,
         categoryId,
         typeId: selectedTypeId || undefined,
-        search: search.trim() || undefined,
+        search: submittedSearch.trim() || undefined,
         minPrice: filters.minPrice || undefined,
         maxPrice: filters.maxPrice || undefined,
         stock: filters.stock || undefined,
@@ -118,7 +119,7 @@ export default function MarketplaceScreen({ navigation, route }) {
     } finally {
       setLoading(false);
     }
-  }, [categoryId, filters, search, selectedTypeId]);
+  }, [categoryId, filters, selectedTypeId, submittedSearch]);
 
   const loadTypes = useCallback(async () => {
     try {
@@ -141,6 +142,10 @@ export default function MarketplaceScreen({ navigation, route }) {
       attributes: { ...filters.attributes },
     });
     setFilterVisible(true);
+  };
+
+  const submitSearch = () => {
+    setSubmittedSearch(search.trim());
   };
 
   const applyFilters = () => {
@@ -192,13 +197,13 @@ export default function MarketplaceScreen({ navigation, route }) {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={loadProducts}
+          onSubmitEditing={submitSearch}
           returnKeyType="search"
           placeholder="Search products..."
           placeholderTextColor={Colors.textMuted}
         />
         {search ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => { setSearch(''); setSubmittedSearch(''); }}>
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         ) : null}

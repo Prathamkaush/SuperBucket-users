@@ -14,6 +14,17 @@ import { clearAuth, getAuthToken } from '../services/auth';
 import { getAddresses } from '../services/addresses';
 
 const { width } = Dimensions.get('window');
+const ADDRESS_CHECK_TIMEOUT_MS = 900;
+
+function withTimeout(promise, timeoutMs, fallback) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 function DeliveryTruck() {
   return (
@@ -47,7 +58,12 @@ export default function SplashScreen({ navigation }) {
       if (!token) return 'Login';
 
       try {
-        const addresses = await getAddresses();
+        const addresses = await withTimeout(
+          getAddresses(),
+          ADDRESS_CHECK_TIMEOUT_MS,
+          null,
+        );
+        if (addresses === null) return 'MainTabs';
         return Array.isArray(addresses) && addresses.length > 0
           ? 'MainTabs'
           : 'Location';
@@ -67,13 +83,13 @@ export default function SplashScreen({ navigation }) {
       Animated.parallel([
         Animated.timing(logoOpacity, {
           toValue: 1,
-          duration: 420,
+          duration: 260,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(logoY, {
           toValue: 0,
-          duration: 520,
+          duration: 300,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -87,19 +103,19 @@ export default function SplashScreen({ navigation }) {
       Animated.parallel([
         Animated.timing(lineScale, {
           toValue: 1,
-          duration: 520,
+          duration: 260,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(taglineOpacity, {
           toValue: 1,
-          duration: 360,
+          duration: 220,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(taglineY, {
           toValue: 0,
-          duration: 360,
+          duration: 220,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
@@ -107,14 +123,14 @@ export default function SplashScreen({ navigation }) {
       Animated.parallel([
         Animated.timing(truckX, {
           toValue: width + 120,
-          duration: 1150,
+          duration: 620,
           easing: Easing.bezier(0.22, 0.8, 0.2, 1),
           useNativeDriver: true,
         }),
         Animated.timing(serviceOpacity, {
           toValue: 1,
-          duration: 500,
-          delay: 250,
+          duration: 220,
+          delay: 80,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
@@ -125,7 +141,7 @@ export default function SplashScreen({ navigation }) {
       navigationTimer = setTimeout(async () => {
         const destination = await destinationPromise;
         if (mounted) navigation.replace(destination);
-      }, 650);
+      }, 120);
     });
 
     return () => {

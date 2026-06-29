@@ -101,6 +101,7 @@ const parseStreet = (streetString) => {
 
 
 export default function LocationScreen({ navigation, route }) {
+  const addNewAddress = Boolean(route?.params?.addNew);
   const [selectedType, setSelectedType] = useState('Home');
   const [form, setForm] = useState(EMPTY_FORM);
   const [isDefault, setIsDefault] = useState(true);
@@ -119,9 +120,9 @@ export default function LocationScreen({ navigation, route }) {
         const userName = user?.name || '';
         const userPhone = user?.phone || '';
 
-        // If user already has a saved address, pre-populate it
+        // If user already has a saved address, pre-populate it unless user asked to add a fresh one.
         const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
-        if (defaultAddr) {
+        if (defaultAddr && !addNewAddress) {
           setAddressId(defaultAddr.id);
           setIsDefault(defaultAddr.isDefault);
 
@@ -155,7 +156,7 @@ export default function LocationScreen({ navigation, route }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [addNewAddress]);
 
 
   const updateField = (key, value) => {
