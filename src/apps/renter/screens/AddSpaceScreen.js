@@ -7,9 +7,14 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import RenterHeader from '../components/RenterHeader';
 import { furnishedOptions, listingCategories, listingModes } from '../data/mockRenterData';
+import { createProperty } from '../services/properties';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 
 function OptionRow({ label, options, value, onChange }) {
@@ -50,20 +55,125 @@ function Field({ label, placeholder, value, onChangeText, keyboardType = 'defaul
   );
 }
 
-export default function AddSpaceScreen() {
+export default function AddSpaceScreen({ navigation }) {
   const [mode, setMode] = useState('Rent');
   const [category, setCategory] = useState('Residential');
   const [furnished, setFurnished] = useState('Semi furnished');
   const [form, setForm] = useState({
     title: '',
     address: '',
+    pincode: '',
     price: '',
     size: '',
     floor: '',
     details: '',
   });
 
+  const [frontImage, setFrontImage] = useState(null);
+  const [roomsImage, setRoomsImage] = useState(null);
+  const [docsFile, setDocsFile] = useState(null);
+  const [docsFileName, setDocsFileName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   const updateForm = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const pickImage = async (type) => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Denied', 'Permission to access gallery is required!');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const selectedUri = result.assets[0].uri;
+      if (type === 'front') setFrontImage(selectedUri);
+      if (type === 'rooms') setRoomsImage(selectedUri);
+    }
+  };
+
+  const pickDocument = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: '*/*',
+      copyToCacheDirectory: true,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setDocsFile(result.assets[0].uri);
+      setDocsFileName(result.assets[0].name || 'document.pdf');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.title || !form.address || !/^\d{6}$/.test(form.pincode) || !form.price || !form.size) {
+      Alert.alert('Validation Error', 'Please enter Title, Address, a valid 6-digit PIN code, Price, and Size.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const formData = new FormData();
+      formData.append('title', form.title);
+      formData.append('address', form.address);
+      formData.append('pincode', form.pincode);
+      formData.append('mode', mode.toUpperCase()); // RENT or SELL
+      formData.append('category', category.toUpperCase()); // RESIDENTIAL, etc.
+      formData.append('price', parseFloat(form.price));
+      formData.append('size', form.size);
+      
+      if (form.floor) {
+        formData.append('floor', form.floor);
+      }
+
+      const furnishedVal = furnished.toUpperCase().replace(' ', '_');
+      formData.append('furnished', furnishedVal); // UNFURNISHED, SEMI_FURNISHED, FULLY_FURNISHED
+      
+      if (form.details) {
+        formData.append('details', form.details);
+      }
+
+      if (frontImage) {
+        formData.append('frontImage', {
+          uri: frontImage,
+          name: 'front.jpg',
+          type: 'image/jpeg',
+        });
+      }
+
+      if (roomsImage) {
+        formData.append('roomsImage', {
+          uri: roomsImage,
+          name: 'rooms.jpg',
+          type: 'image/jpeg',
+        });
+      }
+
+      if (docsFile) {
+        formData.append('docsFile', {
+          uri: docsFile,
+          name: docsFileName || 'document.pdf',
+          type: 'application/octet-stream',
+        });
+      }
+
+      await createProperty(formData);
+
+      Alert.alert(
+        'Success',
+        'Property listing submitted for admin review!',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Submission Failed', error.message || 'Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -86,6 +196,13 @@ export default function AddSpaceScreen() {
             placeholder="Street, area, city"
             value={form.address}
             onChangeText={(value) => updateForm('address', value)}
+          />
+          <Field
+            label="Property PIN code"
+            placeholder="6-digit PIN code"
+            value={form.pincode}
+            onChangeText={(value) => updateForm('pincode', value.replace(/\D/g, '').slice(0, 6))}
+            keyboardType="number-pad"
           />
 
           <View style={styles.twoColumn}>
@@ -140,21 +257,59 @@ export default function AddSpaceScreen() {
           <Text style={styles.uploadTitle}>Photos and documents</Text>
           <Text style={styles.uploadCopy}>Add front view, room photos, ownership proof, and ID proof.</Text>
           <View style={styles.uploadGrid}>
-            {['Front', 'Rooms', 'Docs'].map((label) => (
-              <TouchableOpacity key={label} style={styles.uploadBox}>
-                <Text style={styles.uploadPlus}>+</Text>
-                <Text style={styles.uploadLabel}>{label}</Text>
-              </TouchableOpacity>
-            ))}
+            <TouchableOpacity style={styles.uploadBox} onPress={() => pickImage('front')}>
+              {frontImage ? (
+                <Text style={styles.uploadCheck}>✓ Front View</Text>
+              ) : (
+                <>
+                  <Text style={styles.uploadPlus}>+</Text>
+                  <Text style={styles.uploadLabel}>Front</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.uploadBox} onPress={() => pickImage('rooms')}>
+              {roomsImage ? (
+                <Text style={styles.uploadCheck}>✓ Rooms View</Text>
+              ) : (
+                <>
+                  <Text style={styles.uploadPlus}>+</Text>
+                  <Text style={styles.uploadLabel}>Rooms</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.uploadBox} onPress={pickDocument}>
+              {docsFile ? (
+                <Text style={styles.uploadCheck}>✓ {docsFileName.slice(0, 10)}...</Text>
+              ) : (
+                <>
+                  <Text style={styles.uploadPlus}>+</Text>
+                  <Text style={styles.uploadLabel}>Docs</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.stickyActions}>
-          <TouchableOpacity style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Save draft</Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.goBack()}
+            disabled={submitting}
+          >
+            <Text style={styles.secondaryButtonText}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Submit listing</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, submitting && styles.btnDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color={Colors.white} />
+            ) : (
+              <Text style={styles.primaryButtonText}>Submit listing</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -279,6 +434,13 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: '900',
   },
+  uploadCheck: {
+    color: Colors.secondary,
+    fontSize: FontSize.xs,
+    fontWeight: '900',
+    textAlign: 'center',
+    paddingHorizontal: 4,
+  },
   stickyActions: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -303,6 +465,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     backgroundColor: Colors.primary,
+  },
+  btnDisabled: {
+    backgroundColor: Colors.gray400,
   },
   primaryButtonText: {
     color: Colors.white,

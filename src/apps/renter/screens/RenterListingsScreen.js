@@ -1,18 +1,43 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import RenterHeader from '../components/RenterHeader';
 import SpaceCard from '../components/SpaceCard';
-import { spaces } from '../data/mockRenterData';
+import { getMyProperties, normalizeSpace } from '../services/properties';
 import { Colors, FontSize, Radius, Spacing } from '../theme/theme';
 
 const FILTERS = ['All', 'Rent', 'Sell', 'Live', 'Review', 'Draft'];
 
 export default function RenterListingsScreen({ navigation }) {
+  const [loading, setLoading] = useState(true);
+  const [spaces, setSpaces] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
+
+  const loadListings = useCallback(async () => {
+    try {
+      const data = await getMyProperties();
+      setSpaces(data);
+    } catch (error) {
+      console.log('Error loading listings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadListings();
+    }, [loadListings])
+  );
 
   const filteredSpaces = spaces.filter((space) => {
     if (activeFilter === 'All') return true;
-    return space.mode === activeFilter || space.status === activeFilter;
+    const filter = activeFilter.toUpperCase();
+    return (
+      space.mode === filter ||
+      space.status === filter ||
+      (filter === 'DRAFT' && space.status === 'REJECTED')
+    );
   });
 
   return (
@@ -48,15 +73,27 @@ export default function RenterListingsScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {filteredSpaces.map((space) => (
-          <SpaceCard
-            key={space.id}
-            space={space}
-            onPress={() => navigation.navigate('SpaceDetail', { space })}
-          />
-        ))}
-      </ScrollView>
+      {loading ? (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {filteredSpaces.length > 0 ? (
+            filteredSpaces.map((space) => (
+              <SpaceCard
+                key={space.id}
+                space={normalizeSpace(space)}
+                onPress={() => navigation.navigate('SpaceDetail', { space })}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No listings match the selected filter.</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -108,5 +145,24 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     paddingBottom: 110,
     gap: Spacing.lg,
+  },
+  loaderWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+    fontWeight: '700',
   },
 });

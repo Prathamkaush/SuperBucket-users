@@ -9,14 +9,19 @@ import {
   Text,
   TouchableOpacity,
   View,
+  NativeModules,
+  TurboModuleRegistry,
 } from 'react-native';
+import RazorpayCheckout from 'react-native-razorpay';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import StatusDialog from '../components/StatusDialog';
 import { getCart, removeCartItem, updateCartItem } from '../services/cart';
 import { getAddresses } from '../services/addresses';
-import { placeOrder } from '../services/orders';
+import { getMyOrder, placeOrder, previewOrder } from '../services/orders';
 import { getSettings } from '../services/settings';
+import { createRazorpayOrder, verifyRazorpayPayment } from '../services/payments';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 const DAY_OPTIONS = [
@@ -31,12 +36,14 @@ export default function CartScreen({ navigation }) {
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [deliveryMode, setDeliveryMode] = useState('INSTANT');
+  const [paymentMethod, setPaymentMethod] = useState('COD');
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [slotTimes, setSlotTimes] = useState(DEFAULT_SLOT_TIMES);
   const [selectedSlot, setSelectedSlot] = useState(DEFAULT_SLOT_TIMES[0]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [placing, setPlacing] = useState(false);
+  const [statusDialog, setStatusDialog] = useState(null);
 
   const loadCart = useCallback(async () => {
     try {
@@ -108,6 +115,26 @@ export default function CartScreen({ navigation }) {
   const total = totals.subtotal + totals.gst;
   const selectedAddress = addresses.find((address) => address.id === selectedAddressId);
 
+  const showOrderSuccess = async (order) => {
+    const orderWithOtp = order.deliveryOtp || !order.orderId
+      ? order
+      : await getMyOrder(order.orderId).catch(() => order);
+    setStatusDialog({
+      tone: 'success',
+      title: 'Order placed',
+      message: `Your order #${order.orderId} has been placed successfully.`,
+      detail: orderWithOtp.deliveryOtp
+        ? `Delivery OTP: ${orderWithOtp.deliveryOtp}\nShare it only when the order reaches you.`
+        : 'Delivery OTP will appear in tracking once it is available.',
+      primaryLabel: 'Track order',
+      secondaryLabel: 'Close',
+      onPrimary: () => {
+        setStatusDialog(null);
+        navigation.getParent()?.navigate('OrderTracking', { order: orderWithOtp });
+      },
+    });
+  };
+
   const handleCheckout = async () => {
     if (!addresses.length) {
       navigation.navigate('Location', { returnToCart: true });
@@ -124,6 +151,47 @@ export default function CartScreen({ navigation }) {
       const scheduled = deliveryMode === 'SCHEDULED'
         ? buildScheduledSlot(selectedDayOffset, selectedSlot)
         : null;
+
+      if (paymentMethod === 'RAZORPAY') {
+        if (!isRazorpayNativeModuleAvailable()) {
+          throw new Error(
+            'Online payment is not available in this app build. Create and install a new EAS development/preview build after adding Razorpay.',
+          );
+        }
+
+        const preview = await previewOrder({
+          addressId: selectedAddressId,
+          paymentMethod: 'RAZORPAY',
+        });
+        const payable = Number(preview?.pricing?.payable || total);
+        const razorpayOrder = await createRazorpayOrder(payable);
+        const payment = await RazorpayCheckout.open({
+          key: razorpayOrder.key,
+          amount: razorpayOrder.amount,
+          currency: 'INR',
+          name: 'Superbuket',
+          description: 'Order payment',
+          order_id: razorpayOrder.razorpayOrderId,
+          prefill: {
+            name: selectedAddress?.name || '',
+            contact: selectedAddress?.phone || '',
+          },
+          theme: { color: Colors.primary },
+        });
+        const order = await verifyRazorpayPayment({
+          razorpay_order_id: payment.razorpay_order_id,
+          razorpay_payment_id: payment.razorpay_payment_id,
+          razorpay_signature: payment.razorpay_signature,
+          addressId: selectedAddressId,
+          deliveryMode,
+          scheduledDeliveryAt: scheduled?.date.toISOString(),
+          deliverySlotLabel: scheduled?.label,
+        });
+
+        await showOrderSuccess(order);
+        return;
+      }
+
       const order = await placeOrder({
         addressId: selectedAddressId,
         paymentMethod: 'COD',
@@ -131,13 +199,23 @@ export default function CartScreen({ navigation }) {
         scheduledDeliveryAt: scheduled?.date.toISOString(),
         deliverySlotLabel: scheduled?.label,
       });
-      Alert.alert(
-        'Order placed',
-        `Your order #${order.orderId} has been placed successfully.\n\nDelivery OTP: ${order.deliveryOtp}\nShare this OTP only when the order reaches you.`,
-        [{ text: 'Track order', onPress: () => navigation.getParent()?.navigate('OrderTracking', { order }) }],
-      );
+      await showOrderSuccess(order);
     } catch (error) {
-      Alert.alert('Could not place order', error?.message || 'Please try again');
+      const rawMessage = error?.description || error?.message || '';
+      const message = /Cannot read property 'open' of null|Cannot read properties of null.*open|RNRazorpayCheckout/i.test(rawMessage)
+        ? 'Online payment is not available in this app build. Create and install a new EAS development/preview build after adding Razorpay.'
+        : /cancel/i.test(rawMessage)
+        ? 'Payment was cancelled.'
+        : rawMessage || 'Please try again';
+      setStatusDialog({
+        tone: 'error',
+        title: paymentMethod === 'RAZORPAY' ? 'Payment failed' : 'Could not place order',
+        message,
+        detail: paymentMethod === 'RAZORPAY'
+          ? 'You can try again or switch to Cash on delivery.'
+          : 'Please review your cart details and try again.',
+        primaryLabel: 'OK',
+      });
     } finally {
       setPlacing(false);
     }
@@ -351,6 +429,28 @@ export default function CartScreen({ navigation }) {
                 </View>
               </View>
             </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Payment method</Text>
+              <View style={styles.paymentRow}>
+                <TouchableOpacity
+                  style={[styles.paymentCard, paymentMethod === 'COD' && styles.paymentCardActive]}
+                  onPress={() => setPaymentMethod('COD')}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.paymentTitle}>Cash on delivery</Text>
+                  <Text style={styles.paymentSub}>Pay when your order arrives</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.paymentCard, paymentMethod === 'RAZORPAY' && styles.paymentCardActive]}
+                  onPress={() => setPaymentMethod('RAZORPAY')}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.paymentTitle}>Online</Text>
+                  <Text style={styles.paymentSub}>UPI, cards, wallets</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -368,15 +468,31 @@ export default function CartScreen({ navigation }) {
                 <ActivityIndicator color={Colors.white} />
               ) : (
                 <Text style={styles.checkoutText}>
-                  {addresses.length ? 'PLACE ORDER' : 'ADD ADDRESS'}
+                  {addresses.length ? (paymentMethod === 'RAZORPAY' ? 'PAY ONLINE' : 'PLACE ORDER') : 'ADD ADDRESS'}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
         </>
       )}
+      <StatusDialog
+        visible={Boolean(statusDialog)}
+        tone={statusDialog?.tone}
+        title={statusDialog?.title}
+        message={statusDialog?.message}
+        detail={statusDialog?.detail}
+        primaryLabel={statusDialog?.primaryLabel}
+        secondaryLabel={statusDialog?.secondaryLabel}
+        onPrimary={statusDialog?.onPrimary || (() => setStatusDialog(null))}
+        onSecondary={() => setStatusDialog(null)}
+        onClose={() => setStatusDialog(null)}
+      />
     </View>
   );
+}
+
+function isRazorpayNativeModuleAvailable() {
+  return Boolean(NativeModules.RNRazorpayCheckout || TurboModuleRegistry?.get?.('RNRazorpayCheckout'));
 }
 
 function buildScheduledSlot(offset, timeLabel) {
@@ -493,6 +609,20 @@ const styles = StyleSheet.create({
   totalRow: { marginTop: 4, marginBottom: 0, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
   totalLabel: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '700' },
   totalValue: { color: Colors.primary, fontSize: FontSize.xl, fontWeight: '800' },
+  paymentRow: { flexDirection: 'row', gap: 10 },
+  paymentCard: {
+    flex: 1,
+    minHeight: 76,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    padding: 13,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+  },
+  paymentCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  paymentTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
+  paymentSub: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 4, lineHeight: 17 },
   centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl },
   emptyMark: {
     width: 72,

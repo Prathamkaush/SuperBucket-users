@@ -11,6 +11,19 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import {
+  BriefcaseBusiness,
+  ChevronRight,
+  CircleQuestionMark,
+  House,
+  LogOut,
+  MapPin,
+  Pencil,
+  ShoppingBag,
+  UserRound,
+  WalletCards,
+  Wrench,
+} from 'lucide-react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import LogoBrand from '../components/LogoBrand';
 import { getUploadUrl } from '../services/api';
@@ -18,15 +31,15 @@ import { clearAuth, getStoredUser } from '../services/auth';
 import { getProfile, getProfileStats } from '../services/profile';
 
 const MENU_ITEMS = [
-  { label: 'Edit Profile', screen: 'EditProfile', icon: 'P' },
-  { label: 'Saved Addresses', screen: 'Location', icon: 'A' },
-  { label: 'Order History', screen: 'Orders', icon: 'O' },
-  { label: 'Service Bookings', screen: 'ServiceBookings', icon: 'S' },
-  { label: 'My Properties', screen: 'RenterPortal', icon: 'R' },
-  { label: 'Provider Dashboard', screen: 'ProviderPortal', icon: 'Rs' },
-  { label: 'My Wallet', screen: 'Wallet', icon: 'W' },
-  { label: 'Help Center', screen: null, icon: '?' },
-  { label: 'Logout', screen: 'Login', icon: 'L', danger: true },
+  { label: 'Edit Profile', screen: 'EditProfile', Icon: Pencil },
+  { label: 'Saved Addresses', screen: 'Location', Icon: MapPin },
+  { label: 'Order History', screen: 'Orders', Icon: ShoppingBag },
+  { label: 'Service Bookings', screen: 'ServiceBookings', Icon: Wrench },
+  { label: 'My Properties', screen: 'RenterPortal', Icon: House },
+  { label: 'Provider Dashboard', screen: 'ProviderPortal', Icon: BriefcaseBusiness },
+  { label: 'My Wallet', screen: 'Wallet', Icon: WalletCards },
+  { label: 'Help Center', screen: null, Icon: CircleQuestionMark },
+  { label: 'Logout', screen: 'Login', Icon: LogOut, danger: true },
 ];
 
 
@@ -101,9 +114,7 @@ export default function ProfileScreen({ navigation }) {
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.avatarImage} />
           ) : (
-            <Text style={styles.avatarInitial}>
-              {(user?.name || 'S').charAt(0).toUpperCase()}
-            </Text>
+            <UserRound size={38} color={Colors.primary} strokeWidth={2.4} />
           )}
         </View>
 
@@ -114,7 +125,7 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('EditProfile')}
             activeOpacity={0.7}
           >
-            <Text style={styles.editPen}>✏️</Text>
+            <Pencil size={14} color={Colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
 
@@ -150,7 +161,9 @@ export default function ProfileScreen({ navigation }) {
 
         <Text style={styles.sectionLabel}>Account</Text>
         <View style={styles.menuCard}>
-          {MENU_ITEMS.map((item, index) => (
+          {MENU_ITEMS.map((item, index) => {
+            const Icon = item.Icon;
+            return (
             <TouchableOpacity
               key={item.label}
               style={[styles.menuItem, index < MENU_ITEMS.length - 1 && styles.menuBorder]}
@@ -158,9 +171,11 @@ export default function ProfileScreen({ navigation }) {
               activeOpacity={0.75}
             >
               <View style={[styles.menuIcon, item.danger && styles.dangerIcon]}>
-                <Text style={[styles.menuIconText, item.danger && styles.dangerText]}>
-                  {item.icon}
-                </Text>
+                <Icon
+                  size={20}
+                  color={item.danger ? Colors.danger : Colors.primary}
+                  strokeWidth={2.4}
+                />
               </View>
               <View style={styles.menuCopy}>
                 <Text style={[styles.menuLabel, item.danger && styles.dangerText]}>
@@ -187,9 +202,10 @@ export default function ProfileScreen({ navigation }) {
                   </Text>
                 ) : null}
               </View>
-              {!item.danger ? <Text style={styles.chevron}>{'>'}</Text> : null}
+              {!item.danger ? <ChevronRight size={18} color={Colors.gray400} strokeWidth={2.4} /> : null}
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
         <Text style={styles.version}>SUPERBUCKET v1.0.0</Text>
       </ScrollView>
@@ -240,7 +256,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarInitial: { color: Colors.primary, fontSize: 36, fontWeight: '900' },
   userNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,10 +269,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  editPen: {
-    fontSize: FontSize.xs,
-  },
-
   userContact: { marginTop: 3, color: Colors.textSecondary, fontSize: FontSize.sm },
   userEmail: { marginTop: 2, color: Colors.textMuted, fontSize: FontSize.xs },
   statsRow: {
@@ -305,11 +316,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dangerIcon: { backgroundColor: Colors.dangerLight },
-  menuIconText: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '900' },
   menuCopy: { flex: 1 },
   menuLabel: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '700' },
   menuSub: { marginTop: 2, color: Colors.textMuted, fontSize: FontSize.xs },
   dangerText: { color: Colors.danger },
-  chevron: { color: Colors.gray400, fontSize: FontSize.lg, fontWeight: '700' },
   version: { marginTop: 28, textAlign: 'center', color: Colors.textMuted, fontSize: FontSize.xs },
 });

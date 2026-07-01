@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,14 +13,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import { getUploadUrl } from '../services/api';
 import { getProfile, saveProfile } from '../services/profile';
 
 export default function EditProfileScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -32,6 +37,7 @@ export default function EditProfileScreen({ navigation }) {
         setName(user?.name || '');
         setEmail(user?.email || '');
         setPhone(user?.phone || '');
+        setProfileImage(user?.profileImage || null);
       })
       .catch((err) => {
         Alert.alert('Error', 'Could not load profile details');
@@ -69,6 +75,14 @@ export default function EditProfileScreen({ navigation }) {
       formData.append('name', name.trim());
       formData.append('email', email.trim().toLowerCase());
       formData.append('phone', phone.trim());
+      if (selectedImage) {
+        const extension = getImageExtension(selectedImage.uri);
+        formData.append('image', {
+          uri: selectedImage.uri,
+          name: selectedImage.fileName || `profile-${Date.now()}.${extension}`,
+          type: selectedImage.mimeType || getImageMimeType(extension),
+        });
+      }
 
       await saveProfile(formData);
 
@@ -81,6 +95,30 @@ export default function EditProfileScreen({ navigation }) {
       setSaving(false);
     }
   };
+
+  const pickProfileImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Photo permission needed', 'Allow photo access to add your profile image.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      setSelectedImage(result.assets[0]);
+    } catch (error) {
+      Alert.alert('Image selection failed', error?.message || 'Please try again.');
+    }
+  };
+
+  const previewImageUri = selectedImage?.uri || (profileImage ? getUploadUrl('profiles', profileImage) : null);
 
   if (loading) {
     return (
@@ -111,6 +149,24 @@ export default function EditProfileScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.photoPicker}
+            onPress={pickProfileImage}
+            activeOpacity={0.8}
+          >
+            <View style={styles.avatar}>
+              {previewImageUri ? (
+                <Image source={{ uri: previewImageUri }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitial}>{(name || 'S').charAt(0).toUpperCase()}</Text>
+              )}
+            </View>
+            <View style={styles.photoCopy}>
+              <Text style={styles.photoTitle}>Profile photo</Text>
+              <Text style={styles.photoSub}>{previewImageUri ? 'Tap to change image' : 'Tap to add image'}</Text>
+            </View>
+          </TouchableOpacity>
+
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Full Name*</Text>
             <TextInput
@@ -168,6 +224,19 @@ export default function EditProfileScreen({ navigation }) {
   );
 }
 
+function getImageExtension(uri) {
+  const match = String(uri || '').match(/\.([a-z0-9]+)(?:\?|$)/i);
+  const extension = (match?.[1] || 'jpg').toLowerCase();
+  return extension === 'jpeg' ? 'jpg' : extension;
+}
+
+function getImageMimeType(extension) {
+  if (extension === 'jpg') return 'image/jpeg';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
@@ -195,6 +264,31 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     ...Shadow.sm,
   },
+  photoPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 18,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    overflow: 'hidden',
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: Colors.primaryLight,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarInitial: { color: Colors.primary, fontSize: 30, fontWeight: '900' },
+  photoCopy: { flex: 1 },
+  photoTitle: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '800' },
+  photoSub: { marginTop: 3, color: Colors.textMuted, fontSize: FontSize.xs },
   field: { marginBottom: 16 },
   fieldLabel: { marginBottom: 6, color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600' },
   input: {

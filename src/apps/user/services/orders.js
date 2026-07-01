@@ -32,3 +32,22 @@ export function placeOrder({
     timeoutMs: 20000,
   });
 }
+
+export function previewOrder({
+  addressId,
+  address,
+  paymentMethod = 'COD',
+  couponCode,
+}) {
+  return authenticatedRequest('/orders/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      addressId,
+      address,
+      paymentMethod,
+      couponCode,
+    }),
+    timeoutMs: 20000,
+  });
+}

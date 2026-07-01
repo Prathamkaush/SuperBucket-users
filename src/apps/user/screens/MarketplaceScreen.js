@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getProducts, getProductTypes } from '../services/products';
+import { getCategories } from '../services/categories';
 
 const EMPTY_FILTERS = {
   minPrice: '',
@@ -78,6 +79,7 @@ export default function MarketplaceScreen({ navigation, route }) {
   const categoryId = route.params?.categoryId;
   const categoryName = route.params?.categoryName;
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [selectedTypeId, setSelectedTypeId] = useState(null);
   const [attributeOptions, setAttributeOptions] = useState([]);
@@ -129,11 +131,20 @@ export default function MarketplaceScreen({ navigation, route }) {
     }
   }, [categoryId]);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategories(await getCategories());
+    } catch {
+      setCategories([]);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadProducts();
       loadTypes();
-    }, [loadProducts, loadTypes]),
+      loadCategories();
+    }, [loadCategories, loadProducts, loadTypes]),
   );
 
   const openFilters = () => {
@@ -146,6 +157,14 @@ export default function MarketplaceScreen({ navigation, route }) {
 
   const submitSearch = () => {
     setSubmittedSearch(search.trim());
+  };
+
+  const selectCategory = (category) => {
+    setSelectedTypeId(null);
+    navigation.setParams({
+      categoryId: category?.id,
+      categoryName: category?.name,
+    });
   };
 
   const applyFilters = () => {
@@ -216,29 +235,29 @@ export default function MarketplaceScreen({ navigation, route }) {
           contentContainerStyle={styles.typeList}
         >
           <TouchableOpacity
-            style={[styles.typeChip, !selectedTypeId && styles.typeChipActive]}
-            onPress={() => setSelectedTypeId(null)}
+            style={[styles.typeChip, !categoryId && styles.typeChipActive]}
+            onPress={() => selectCategory(null)}
           >
-            <Text style={[styles.typeChipText, !selectedTypeId && styles.typeChipTextActive]}>
+            <Text style={[styles.typeChipText, !categoryId && styles.typeChipTextActive]}>
               All
             </Text>
           </TouchableOpacity>
-          {productTypes.map((type) => (
+          {categories.map((category) => (
             <TouchableOpacity
-              key={type.id}
+              key={category.id}
               style={[
                 styles.typeChip,
-                selectedTypeId === type.id && styles.typeChipActive,
+                categoryId === category.id && styles.typeChipActive,
               ]}
-              onPress={() => setSelectedTypeId(type.id)}
+              onPress={() => selectCategory(category)}
             >
               <Text
                 style={[
                   styles.typeChipText,
-                  selectedTypeId === type.id && styles.typeChipTextActive,
+                  categoryId === category.id && styles.typeChipTextActive,
                 ]}
               >
-                {type.name}
+                {category.name}
               </Text>
             </TouchableOpacity>
           ))}
@@ -249,6 +268,42 @@ export default function MarketplaceScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {productTypes.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subtypeList}
+        >
+          <TouchableOpacity
+            style={[styles.subtypeChip, !selectedTypeId && styles.subtypeChipActive]}
+            onPress={() => setSelectedTypeId(null)}
+          >
+            <Text style={[styles.subtypeChipText, !selectedTypeId && styles.subtypeChipTextActive]}>
+              All in {categoryName || 'category'}
+            </Text>
+          </TouchableOpacity>
+          {productTypes.map((type) => (
+            <TouchableOpacity
+              key={type.id}
+              style={[
+                styles.subtypeChip,
+                selectedTypeId === type.id && styles.subtypeChipActive,
+              ]}
+              onPress={() => setSelectedTypeId(type.id)}
+            >
+              <Text
+                style={[
+                  styles.subtypeChipText,
+                  selectedTypeId === type.id && styles.subtypeChipTextActive,
+                ]}
+              >
+                {type.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
 
       {loading ? (
         <View style={styles.stateBox}>
@@ -524,6 +579,22 @@ const styles = StyleSheet.create({
   typeChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primary },
   typeChipText: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '700' },
   typeChipTextActive: { color: Colors.white },
+  subtypeList: {
+    gap: 8,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  subtypeChip: {
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  subtypeChipActive: { backgroundColor: Colors.secondaryLight },
+  subtypeChipText: { color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '800' },
+  subtypeChipTextActive: { color: Colors.secondaryDark },
   filterButton: {
     borderWidth: 1,
     borderColor: Colors.primary,

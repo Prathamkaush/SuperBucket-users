@@ -8,6 +8,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import LogoBrand from '../components/LogoBrand';
 import { getCategories } from '../services/categories';
 import { getProducts } from '../services/products';
+import { getAddresses } from '../services/addresses';
+import { getProfile } from '../services/profile';
+import { getUploadUrl } from '../services/api';
 
 const CATEGORIES = [
   { id: '1',  icon: '🛒', label: 'Groceries',         screen: 'Grocery',      bg: '#FFF0F0' },
@@ -135,6 +138,8 @@ export default function HomeScreen({ navigation }) {
   const [categoriesError, setCategoriesError] = useState('');
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [defaultAddress, setDefaultAddress] = useState(null);
+  const [user, setUser] = useState(null);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -160,15 +165,29 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
+  const loadHeaderData = useCallback(async () => {
+    const [profile, addresses] = await Promise.all([
+      getProfile().catch(() => null),
+      getAddresses().catch(() => []),
+    ]);
+
+    setUser(profile);
+    setDefaultAddress(addresses.find((address) => address.isDefault) || addresses[0] || null);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadCategories();
       loadTrending();
-    }, [loadCategories, loadTrending]),
+      loadHeaderData();
+    }, [loadCategories, loadTrending, loadHeaderData]),
   );
 
   const openTrending = (product) =>
     navigation.navigate('ProductDetail', { productId: product.id, product });
+  const locationLabel = formatAddressLabel(defaultAddress);
+  const profileImageUrl = user?.profileImage ? getUploadUrl('profiles', user.profileImage) : null;
+  const profileInitial = (user?.name || 'S').charAt(0).toUpperCase();
 
   return (
     <View style={styles.container}>
@@ -178,9 +197,13 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.topBar}>
         <View style={styles.topLeft}>
           <LogoBrand size="sm" />
-          <TouchableOpacity style={styles.locationRow}>
+          <TouchableOpacity
+            style={styles.locationRow}
+            onPress={() => navigation.navigate('Location')}
+            activeOpacity={0.75}
+          >
             <Text style={styles.pinIcon}>📍</Text>
-            <Text style={styles.locationText} numberOfLines={1}>Sector 14, Gurugram</Text>
+            <Text style={styles.locationText} numberOfLines={1}>{locationLabel}</Text>
             <Text style={styles.chevron}>▾</Text>
           </TouchableOpacity>
         </View>
@@ -196,10 +219,16 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={[styles.iconBtn, styles.profileBtn]}
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={styles.iconBtnText}>👤</Text>
+            <View style={styles.profileAvatar}>
+              {profileImageUrl ? (
+                <Image source={{ uri: profileImageUrl }} style={styles.profileAvatarImage} />
+              ) : (
+                <Text style={styles.profileAvatarText}>{profileInitial}</Text>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -387,6 +416,19 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
+function formatAddressLabel(address) {
+  if (!address) return 'Add delivery address';
+
+  const area = [
+    address.house,
+    address.area,
+    address.street,
+  ].find((value) => String(value || '').trim());
+  const city = String(address.city || '').trim();
+
+  return [area, city].filter(Boolean).join(', ') || address.pincode || 'Saved address';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
@@ -425,6 +467,26 @@ const styles = StyleSheet.create({
   walletText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '800' },
   iconBtn: { position: 'relative', padding: 4 },
   iconBtnText: { fontSize: 21 },
+  profileBtn: {
+    width: 38,
+    height: 38,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatar: {
+    width: 30,
+    height: 30,
+    overflow: 'hidden',
+    borderRadius: 15,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.white,
+  },
+  profileAvatarImage: { width: '100%', height: '100%' },
+  profileAvatarText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   badge: {
     position: 'absolute',
     top: 0,

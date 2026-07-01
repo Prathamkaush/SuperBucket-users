@@ -1,9 +1,44 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Image, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { deleteProperty, normalizeSpace, advertiseProperty } from '../services/properties';
+import { getUploadUrl } from '../services/api';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
+import BackButton from '../components/BackButton';
+
+const PHOTO_WIDTH = Dimensions.get('window').width - (Spacing.lg * 2);
 
 export default function SpaceDetailScreen({ route, navigation }) {
-  const space = route?.params?.space;
+  const rawSpace = route?.params?.space;
+  const space = normalizeSpace(rawSpace);
+  const [deleting, setDeleting] = useState(false);
+  const [isAdvertised, setIsAdvertised] = useState(rawSpace?.isAdvertised || false);
+  const [promoting, setPromoting] = useState(false);
+
+  const handlePromote = () => {
+    Alert.alert(
+      'Promote Listing',
+      'Are you sure you want to promote this property to be displayed as a Sponsored Ad?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Promote',
+          onPress: async () => {
+            try {
+              setPromoting(true);
+              await advertiseProperty(space.id);
+              setIsAdvertised(true);
+              Alert.alert('Promoted!', 'This listing is now active as a Sponsored Ad.');
+            } catch (error) {
+              Alert.alert('Error', error.message || 'Could not promote listing');
+            } finally {
+              setPromoting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
 
   if (!space) {
     return (
@@ -13,13 +48,42 @@ export default function SpaceDetailScreen({ route, navigation }) {
     );
   }
 
+  const propertyImages = [space.frontImage, space.roomsImage]
+    .filter(Boolean)
+    .map((fileName) => getUploadUrl('properties', fileName));
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Listing',
+      'Are you sure you want to delete this property listing permanently?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              await deleteProperty(space.id);
+              Alert.alert('Deleted', 'Property listing deleted successfully.', [
+                { text: 'OK', onPress: () => navigation.goBack() }
+              ]);
+            } catch (error) {
+              Alert.alert('Error', error.message || 'Could not delete listing');
+            } finally {
+              setDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.secondary} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+        <BackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerBody}>
           <Text style={styles.headerTitle}>{space.title}</Text>
           <Text style={styles.headerSubtitle}>{space.location}</Text>
@@ -28,10 +92,23 @@ export default function SpaceDetailScreen({ route, navigation }) {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.preview}>
-          <Text style={styles.previewText}>{space.category}</Text>
+          {propertyImages.length ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {propertyImages.map((imageUrl) => (
+                <Image key={imageUrl} source={{ uri: imageUrl }} style={styles.previewImage} resizeMode="cover" />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.previewText}>{space.category}</Text>
+          )}
           <View style={styles.previewPill}>
             <Text style={styles.previewPillText}>{space.mode}</Text>
           </View>
+          {propertyImages.length > 1 && (
+            <View style={styles.photoCountBadge}>
+              <Text style={styles.photoCountText}>{propertyImages.length} photos · swipe</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.priceCard}>
@@ -51,7 +128,7 @@ export default function SpaceDetailScreen({ route, navigation }) {
           </View>
           <View style={styles.infoBox}>
             <Text style={styles.infoLabel}>Floor</Text>
-            <Text style={styles.infoValue}>{space.floor}</Text>
+            <Text style={styles.infoValue}>{space.floor || 'Ground'}</Text>
           </View>
           <View style={styles.infoBox}>
             <Text style={styles.infoLabel}>Leads</Text>
@@ -63,30 +140,71 @@ export default function SpaceDetailScreen({ route, navigation }) {
           </View>
         </View>
 
+        {space.details && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Description</Text>
+            <Text style={styles.cardCopy}>{space.details}</Text>
+          </View>
+        )}
+
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Amenities</Text>
+          <Text style={styles.cardTitle}>Specifications</Text>
           <View style={styles.amenities}>
-            {space.amenities.map((item) => (
-              <View key={item} style={styles.amenity}>
-                <Text style={styles.amenityText}>{item}</Text>
-              </View>
-            ))}
+            <View style={styles.amenity}>
+              <Text style={styles.amenityText}>
+                Furnishing: {space.furnished?.replace('_', ' ').toLowerCase() || 'unfurnished'}
+              </Text>
+            </View>
+            <View style={styles.amenity}>
+              <Text style={styles.amenityText}>
+                Verification: {space.verification}
+              </Text>
+            </View>
+            <View style={styles.amenity}>
+              <Text style={styles.amenityText}>
+                Documents: {space.docsFile ? 'Uploaded securely' : 'Not uploaded'}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Listing health</Text>
-          <Text style={styles.cardCopy}>
-            Add more photos, exact map position, and available visit slots to improve lead quality.
-          </Text>
-        </View>
+        {isAdvertised ? (
+          <View style={styles.promotedPill}>
+            <Text style={styles.promotedPillText}>✨ Promoted Ad (Active)</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.promoteButton, promoting && styles.btnDisabled]}
+            onPress={handlePromote}
+            disabled={promoting}
+            activeOpacity={0.85}
+          >
+            {promoting ? (
+              <ActivityIndicator color={Colors.primary} />
+            ) : (
+              <Text style={styles.promoteButtonText}>🚀 Promote Listing (Place Ad)</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.secondaryButton}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => Alert.alert('Edit feature', 'Property editing is coming soon.')}
+          >
             <Text style={styles.secondaryButtonText}>Edit listing</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Boost</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, deleting && styles.btnDisabled]}
+            onPress={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator color={Colors.white} />
+            ) : (
+              <Text style={styles.primaryButtonText}>Delete listing</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -152,6 +270,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  previewImage: {
+    width: PHOTO_WIDTH,
+    height: '100%',
+  },
+  photoCountBadge: {
+    position: 'absolute', bottom: Spacing.md, right: Spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.68)', borderRadius: Radius.full,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  photoCountText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '800' },
   previewText: {
     color: Colors.secondary,
     fontSize: FontSize.display,
@@ -195,12 +323,12 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     borderRadius: Radius.full,
-    backgroundColor: Colors.successLight,
+    backgroundColor: Colors.secondaryLight,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   statusText: {
-    color: Colors.success,
+    color: Colors.secondary,
     fontSize: FontSize.xs,
     fontWeight: '900',
   },
@@ -290,8 +418,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.primary,
   },
+  btnDisabled: {
+    backgroundColor: Colors.gray400,
+  },
   primaryButtonText: {
     color: Colors.white,
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+  promoteButton: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.sm,
+  },
+  promoteButtonText: {
+    color: Colors.primary,
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+  promotedPill: {
+    backgroundColor: Colors.successLight,
+    borderWidth: 1.5,
+    borderColor: Colors.success,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promotedPillText: {
+    color: Colors.success,
     fontSize: FontSize.sm,
     fontWeight: '900',
   },

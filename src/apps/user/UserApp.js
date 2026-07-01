@@ -4,6 +4,19 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BriefcaseBusiness,
+  ChartColumn,
+  House,
+  LayoutDashboard,
+  ListChecks,
+  MapPinned,
+  Plus,
+  ShoppingBag,
+  ShoppingCart,
+  UserRound,
+  WalletCards,
+} from 'lucide-react-native';
 
 import SplashScreen      from './screens/SplashScreen';
 import LoginScreen       from './screens/LoginScreen';
@@ -32,6 +45,7 @@ import AddSpaceScreen from '../renter/screens/AddSpaceScreen';
 import RenterLeadsScreen from '../renter/screens/RenterLeadsScreen';
 import RenterProfileScreen from '../renter/screens/RenterProfileScreen';
 import SpaceDetailScreen from '../renter/screens/SpaceDetailScreen';
+import BankDetailsScreen from '../renter/screens/BankDetailsScreen';
 import ProviderLoginScreen from '../provider/screens/LoginScreen';
 import ProviderOnboardingScreen from '../provider/screens/OnboardingScreen';
 import ProviderDashboardScreen from '../provider/screens/DashboardScreen';
@@ -58,11 +72,15 @@ const TAB_ITEMS = [
   { name: 'Profile', icon: '👤',  label: 'Profile' },
 ];
 
-function TabIcon({ icon, focused, label }) {
+function TabIcon({ Icon, focused }) {
   return (
     <View style={tabStyles.iconWrap}>
       <View style={[tabStyles.iconBg, focused && tabStyles.iconBgActive]}>
-        <Text style={[tabStyles.icon, focused && tabStyles.iconFocused]}>{icon}</Text>
+        <Icon
+          size={focused ? 22 : 20}
+          color={focused ? Colors.primary : Colors.gray500}
+          strokeWidth={2.4}
+        />
       </View>
     </View>
   );
@@ -93,7 +111,7 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🏠" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={House} focused={focused} />,
           tabBarLabel: 'Home',
         }}
       />
@@ -101,7 +119,7 @@ function MainTabs() {
         name="Grocery"
         component={MarketplaceScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🛒" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={ShoppingBag} focused={focused} />,
           tabBarLabel: 'Shop',
         }}
       />
@@ -112,7 +130,11 @@ function MainTabs() {
           tabBarIcon: ({ focused }) => (
             <View style={tabStyles.cartIconWrap}>
               <View style={[tabStyles.cartBubble, focused && tabStyles.cartBubbleFocused]}>
-                <Text style={tabStyles.cartIcon}>🛍️</Text>
+                <ShoppingCart
+                  size={23}
+                  color={focused ? Colors.white : Colors.gray600}
+                  strokeWidth={2.5}
+                />
               </View>
             </View>
           ),
@@ -127,7 +149,7 @@ function MainTabs() {
         name="Wallet"
         component={WalletScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="💰" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={WalletCards} focused={focused} />,
           tabBarLabel: 'Wallet',
         }}
       />
@@ -135,7 +157,7 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={UserRound} focused={focused} />,
           tabBarLabel: 'Profile',
         }}
       />
@@ -144,26 +166,28 @@ function MainTabs() {
 }
 
 const RENTER_TABS = {
-  Dashboard: 'DB',
-  Listings: 'LS',
-  AddSpace: '+',
-  Leads: 'LD',
-  Profile: 'PR',
+  Dashboard: LayoutDashboard,
+  Listings: ListChecks,
+  AddSpace: Plus,
+  Leads: MapPinned,
+  Profile: UserRound,
 };
 
 const PROVIDER_TABS = {
-  Dashboard: 'DB',
-  Jobs: 'JB',
-  Earnings: 'Rs',
-  Profile: 'PR',
+  Dashboard: LayoutDashboard,
+  Jobs: BriefcaseBusiness,
+  Earnings: ChartColumn,
+  Profile: UserRound,
 };
 
-function MiniTabIcon({ label, focused }) {
+function MiniTabIcon({ Icon, focused }) {
   return (
     <View style={[tabStyles.miniIcon, focused && tabStyles.miniIconActive]}>
-      <Text style={[tabStyles.miniIconText, focused && tabStyles.miniIconTextActive]}>
-        {label}
-      </Text>
+      <Icon
+        size={18}
+        color={focused ? Colors.white : Colors.primary}
+        strokeWidth={2.4}
+      />
     </View>
   );
 }
@@ -178,7 +202,7 @@ function RenterTabs() {
         tabBarStyle: tabStyles.innerTabBar,
         tabBarLabelStyle: tabStyles.label,
         tabBarIcon: ({ focused }) => (
-          <MiniTabIcon label={RENTER_TABS[route.name]} focused={focused} />
+          <MiniTabIcon Icon={RENTER_TABS[route.name]} focused={focused} />
         ),
       })}
     >
@@ -200,6 +224,7 @@ function RenterPortal() {
     <RenterStack.Navigator screenOptions={{ headerShown: false }}>
       <RenterStack.Screen name="RenterTabs" component={RenterTabs} />
       <RenterStack.Screen name="SpaceDetail" component={SpaceDetailScreen} />
+      <RenterStack.Screen name="BankDetails" component={BankDetailsScreen} />
     </RenterStack.Navigator>
   );
 }
@@ -214,7 +239,7 @@ function ProviderTabs() {
         tabBarStyle: tabStyles.innerTabBar,
         tabBarLabelStyle: tabStyles.label,
         tabBarIcon: ({ focused }) => (
-          <MiniTabIcon label={PROVIDER_TABS[route.name]} focused={focused} />
+          <MiniTabIcon Icon={PROVIDER_TABS[route.name]} focused={focused} />
         ),
       })}
     >
@@ -363,9 +388,6 @@ const tabStyles = StyleSheet.create({
   cartBubbleFocused: {
     backgroundColor: Colors.primary,
   },
-  cartIcon: {
-    fontSize: 22,
-  },
   innerTabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 0,
@@ -386,15 +408,7 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   miniIconActive: {
-    backgroundColor: Colors.primaryLight,
-  },
-  miniIconText: {
-    color: Colors.gray500,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  miniIconTextActive: {
-    color: Colors.primary,
+    backgroundColor: Colors.primary,
   },
   portalLoading: {
     flex: 1,
