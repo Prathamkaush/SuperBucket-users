@@ -30,6 +30,8 @@ const EMPTY_FORM = {
   pincode: '',
   floor: '',
   notes: '',
+  latitude: '',
+  longitude: '',
 };
 
 const FIELDS = [
@@ -140,6 +142,8 @@ export default function LocationScreen({ navigation, route }) {
             pincode: defaultAddr.pincode || '',
             floor: parsed.floor || '',
             notes: parsed.notes || '',
+            latitude: defaultAddr.latitude ? String(defaultAddr.latitude) : '',
+            longitude: defaultAddr.longitude ? String(defaultAddr.longitude) : '',
           });
         } else {
           setForm((current) => ({
@@ -217,6 +221,8 @@ export default function LocationScreen({ navigation, route }) {
         pincode: String(address.postalCode || '')
           .replace(/\D/g, '')
           .slice(0, 6),
+        latitude: String(position.coords.latitude),
+        longitude: String(position.coords.longitude),
       }));
 
       Alert.alert(
@@ -271,6 +277,8 @@ export default function LocationScreen({ navigation, route }) {
         city: form.city.trim(),
         state: form.state.trim(),
         pincode: form.pincode,
+        latitude: form.latitude ? Number(form.latitude) : undefined,
+        longitude: form.longitude ? Number(form.longitude) : undefined,
         isDefault,
       };
 
@@ -329,7 +337,7 @@ export default function LocationScreen({ navigation, route }) {
               {locating ? 'Detecting your location...' : 'Use Current Location'}
             </Text>
             <Text style={styles.locationSub}>
-              Auto-fill area, city, state, and pincode
+              Auto-fill area, city, pincode, and map coordinates
             </Text>
           </View>
           <Text style={styles.arrow}>{'>'}</Text>

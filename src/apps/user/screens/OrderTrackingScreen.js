@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   placeholderIcon: {
     width: 70,
     height: 70,
-    marginBottom: 8,
+    marginBottom: 100,
     borderRadius: 35,
     alignItems: 'center',
     justifyContent: 'center',
