@@ -1,9 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
 import { apiRequest } from './api';
+import { registerForPushNotifications } from './notifications';
 
 async function persistAuth(data) {
   await SecureStore.setItemAsync('auth_token', data.token);
   await SecureStore.setItemAsync('auth_user', JSON.stringify(data.user));
+  registerForPushNotifications(data.token, 'user').catch(() => undefined);
   return data;
 }
 

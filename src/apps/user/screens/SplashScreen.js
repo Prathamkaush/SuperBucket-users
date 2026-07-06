@@ -12,6 +12,7 @@ import { Colors, FontSize } from '../theme/theme';
 import LogoBrand from '../components/LogoBrand';
 import { clearAuth, getAuthToken } from '../services/auth';
 import { getAddresses } from '../services/addresses';
+import { registerForPushNotifications } from '../services/notifications';
 
 const { width } = Dimensions.get('window');
 const ADDRESS_CHECK_TIMEOUT_MS = 900;
@@ -56,6 +57,7 @@ export default function SplashScreen({ navigation }) {
     const resolveDestination = async () => {
       const token = await getAuthToken();
       if (!token) return 'Login';
+      registerForPushNotifications(token, 'user').catch(() => undefined);
 
       try {
         const addresses = await withTimeout(

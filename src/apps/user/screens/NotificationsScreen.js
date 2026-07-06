@@ -1,54 +1,68 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
-
-const NOTIFICATIONS = [
-  {
-    id: '1', icon: '📦', title: 'Order Packed!',
-    body: 'Your order #SB2045 is packed and ready for dispatch.',
-    time: '2 min ago', read: false, accent: Colors.primary, bg: Colors.primaryLight,
-  },
-  {
-    id: '2', icon: '🚴', title: 'Rider is on the way',
-    body: 'Vikram Singh is heading to your location. ETA: 12 mins.',
-    time: '18 min ago', read: false, accent: '#F59E0B', bg: '#FFF8E1',
-  },
-  {
-    id: '3', icon: '💰', title: 'Cashback Added!',
-    body: '₹24 cashback added to your wallet for order #SB2039.',
-    time: '1 hr ago', read: true, accent: Colors.success, bg: Colors.successLight,
-  },
-  {
-    id: '4', icon: '🎁', title: 'Wallet Updated',
-    body: 'Your wallet was credited with ₹128 change from rider.',
-    time: '2 hrs ago', read: true, accent: Colors.secondary, bg: Colors.secondaryLight,
-  },
-  {
-    id: '5', icon: '🛒', title: 'Order Delivered ✓',
-    body: 'Your order #SB2039 was delivered successfully. Rate your experience!',
-    time: 'Yesterday', read: true, accent: Colors.success, bg: Colors.successLight,
-  },
-  {
-    id: '6', icon: '🎉', title: 'Festival Offer!',
-    body: '20% off on all grocery orders this weekend. Use code: FEST20',
-    time: '2 days ago', read: true, accent: '#E65C00', bg: '#FFF3E6',
-  },
-];
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../services/notifications';
 
 export default function NotificationsScreen({ navigation }) {
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
-  const unreadCount = notifs.filter(n => !n.read).length;
+  const [notifs, setNotifs] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
 
-  const markAllRead = () => setNotifs(notifs.map(n => ({ ...n, read: true })));
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError('');
+    try {
+      const response = await getNotifications();
+      setNotifs(response.items || []);
+      setUnreadCount(Number(response.unread || 0));
+    } catch (e) {
+      setError(e.message || 'Could not load notifications');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const markAllRead = async () => {
+    setNotifs((items) => items.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
+    setUnreadCount(0);
+    await markAllNotificationsRead().catch(() => undefined);
+  };
+
+  const openNotification = async (notif) => {
+    if (!notif.readAt) {
+      setNotifs((items) => items.map((item) => (
+        item.id === notif.id ? { ...item, readAt: new Date().toISOString() } : item
+      )));
+      setUnreadCount((value) => Math.max(0, value - 1));
+      markNotificationRead(notif.id).catch(() => undefined);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
 
-      {/* Header */}
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
@@ -67,50 +81,109 @@ export default function NotificationsScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={{ paddingVertical: 12, paddingBottom: 50 }}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Unread section label */}
-        {notifs.some(n => !n.read) && (
-          <Text style={styles.sectionLabel}>NEW</Text>
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load(true);
+            }}
+            tintColor={Colors.primary}
+          />
         )}
+      >
+        {unreadCount > 0 && <Text style={styles.sectionLabel}>NEW</Text>}
 
-        {notifs.map((notif) => (
-          <TouchableOpacity
-            key={notif.id}
-            style={[
-              styles.notifCard,
-              !notif.read && styles.notifCardUnread,
-              !notif.read && { borderLeftColor: notif.accent },
-            ]}
-            activeOpacity={0.8}
-          >
-            {/* Icon */}
-            <View style={[styles.notifIconWrap, { backgroundColor: notif.bg }]}>
-              <Text style={styles.notifIcon}>{notif.icon}</Text>
-            </View>
+        {loading ? (
+          <View style={styles.stateBox}>
+            <ActivityIndicator color={Colors.primary} />
+            <Text style={styles.stateText}>Loading notifications...</Text>
+          </View>
+        ) : null}
 
-            {/* Content */}
-            <View style={{ flex: 1 }}>
-              <View style={styles.notifTitleRow}>
-                <Text style={[styles.notifTitle, !notif.read && { color: Colors.textPrimary }]}>
-                  {notif.title}
-                </Text>
-                {!notif.read && (
-                  <View style={[styles.unreadDot, { backgroundColor: notif.accent }]} />
-                )}
+        {!loading && error ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.stateTitle}>Could not load</Text>
+            <Text style={styles.stateText}>{error}</Text>
+            <TouchableOpacity onPress={() => load()} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {!loading && !error && !notifs.length ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.stateTitle}>No notifications yet</Text>
+            <Text style={styles.stateText}>Order, wallet, property, and offer updates will appear here.</Text>
+          </View>
+        ) : null}
+
+        {notifs.map((notif) => {
+          const unread = !notif.readAt;
+          const accent = accentForType(notif.type);
+          return (
+            <TouchableOpacity
+              key={notif.id}
+              style={[
+                styles.notifCard,
+                unread && styles.notifCardUnread,
+                unread && { borderLeftColor: accent },
+              ]}
+              activeOpacity={0.8}
+              onPress={() => openNotification(notif)}
+            >
+              <View style={[styles.notifIconWrap, { backgroundColor: `${accent}18` }]}>
+                <Text style={[styles.notifIcon, { color: accent }]}>{iconForType(notif.type)}</Text>
               </View>
-              <Text style={styles.notifBody} numberOfLines={2}>{notif.body}</Text>
-              <Text style={styles.notifTime}>{notif.time}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+
+              <View style={{ flex: 1 }}>
+                <View style={styles.notifTitleRow}>
+                  <Text style={[styles.notifTitle, unread && { color: Colors.textPrimary }]}>
+                    {notif.title}
+                  </Text>
+                  {unread && <View style={[styles.unreadDot, { backgroundColor: accent }]} />}
+                </View>
+                <Text style={styles.notifBody} numberOfLines={2}>{notif.body}</Text>
+                <Text style={styles.notifTime}>{formatTime(notif.createdAt)}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </View>
   );
 }
 
+function accentForType(type = '') {
+  if (type.includes('ORDER')) return Colors.primary;
+  if (type.includes('DELIVERY')) return '#F59E0B';
+  if (type.includes('WALLET')) return Colors.success;
+  if (type.includes('PROPERTY')) return Colors.secondary;
+  return '#E65C00';
+}
+
+function iconForType(type = '') {
+  if (type.includes('ORDER')) return 'O';
+  if (type.includes('DELIVERY')) return 'D';
+  if (type.includes('WALLET')) return 'W';
+  if (type.includes('PROPERTY')) return 'P';
+  return 'N';
+}
+
+function formatTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return date.toLocaleDateString();
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-
   header: {
     backgroundColor: Colors.primaryLight,
     flexDirection: 'row',
@@ -122,12 +195,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  backBtn: {
-    width: 36, height: 36, borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  backArrow: { fontSize: 20, color: Colors.white, fontWeight: '700' },
   headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.textPrimary },
   unreadBadge: {
     marginTop: 4,
@@ -139,14 +206,14 @@ const styles = StyleSheet.create({
   },
   unreadBadgeText: { fontSize: 9, color: Colors.white, fontWeight: '800' },
   markAllBtn: {
-    paddingHorizontal: 10, paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderRadius: Radius.sm,
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: '#F3B9BE',
   },
   markAllText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '700' },
-
   sectionLabel: {
     fontSize: FontSize.xxs,
     fontWeight: '800',
@@ -156,7 +223,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
-
   notifCard: {
     flexDirection: 'row',
     backgroundColor: Colors.white,
@@ -181,7 +247,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  notifIcon: { fontSize: 24 },
+  notifIcon: { fontSize: 18, fontWeight: '900' },
   notifTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -212,4 +278,18 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontWeight: '500',
   },
+  stateBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: Spacing.lg,
+    marginTop: 28,
+    padding: 24,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    ...Shadow.sm,
+  },
+  stateTitle: { fontSize: FontSize.md, fontWeight: '800', color: Colors.textPrimary, marginBottom: 6 },
+  stateText: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', lineHeight: 18, marginTop: 8 },
+  retryBtn: { marginTop: 14, backgroundColor: Colors.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: Radius.sm },
+  retryText: { color: Colors.white, fontWeight: '800', fontSize: FontSize.xs },
 });

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Linking,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -11,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
 import {
   Bike,
   Check,
@@ -25,6 +25,11 @@ import {
 import BackButton from '../components/BackButton';
 import { getMyOrder } from '../services/orders';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
+
+const ENABLE_NATIVE_MAPS =
+  process.env.EXPO_PUBLIC_ENABLE_NATIVE_MAPS === 'true' &&
+  Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY);
+const NativeMaps = getNativeMaps();
 
 export default function OrderTrackingScreen({ navigation, route }) {
   const initialOrder = route?.params?.order || null;
@@ -79,6 +84,12 @@ export default function OrderTrackingScreen({ navigation, route }) {
   const mapRegion = useMemo(() => buildRegion(mapPoints), [driverPoint, shopPoint, customerPoint]);
   const routeLine = [driverPoint, customerPoint].filter(Boolean);
   const hasLiveLocation = Boolean(driverPoint && order?.status === 'SHIPPED');
+  const canShowNativeMap = Boolean(NativeMaps && mapRegion);
+  const openExternalMap = () => {
+    const destination = driverPoint || shopPoint || customerPoint;
+    if (!destination) return;
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${destination.latitude},${destination.longitude}`).catch(() => {});
+  };
 
   return (
     <View style={styles.container}>
@@ -99,31 +110,36 @@ export default function OrderTrackingScreen({ navigation, route }) {
           refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
         >
           <View style={styles.mapWrap}>
-            {mapRegion ? (
-              <MapView style={styles.map} region={mapRegion} showsUserLocation={false}>
+            {canShowNativeMap ? (
+              <NativeMaps.MapView style={styles.map} region={mapRegion} showsUserLocation={false}>
                 {shopPoint ? (
-                  <Marker coordinate={shopPoint} title={order?.shop?.name || 'Pickup'} pinColor={Colors.warning} />
+                  <NativeMaps.Marker coordinate={shopPoint} title={order?.shop?.name || 'Pickup'} pinColor={Colors.warning} />
                 ) : null}
                 {customerPoint ? (
-                  <Marker coordinate={customerPoint} title="Your delivery address" pinColor={Colors.primary} />
+                  <NativeMaps.Marker coordinate={customerPoint} title="Your delivery address" pinColor={Colors.primary} />
                 ) : null}
                 {driverPoint ? (
-                  <Marker coordinate={driverPoint} title={order?.deliveryPartnerName || 'Delivery partner'}>
+                  <NativeMaps.Marker coordinate={driverPoint} title={order?.deliveryPartnerName || 'Delivery partner'}>
                     <Animated.View style={[styles.driverMarker, { transform: [{ scale: pulseAnim }] }]}>
                       <Bike size={19} color={Colors.white} strokeWidth={2.8} />
                     </Animated.View>
-                  </Marker>
+                  </NativeMaps.Marker>
                 ) : null}
                 {routeLine.length >= 2 ? (
-                  <Polyline coordinates={routeLine} strokeColor={Colors.secondary} strokeWidth={4} />
+                  <NativeMaps.Polyline coordinates={routeLine} strokeColor={Colors.secondary} strokeWidth={4} />
                 ) : null}
-              </MapView>
+              </NativeMaps.MapView>
             ) : (
               <View style={styles.mapPlaceholder}>
                 <Animated.View style={[styles.placeholderIcon, { transform: [{ scale: pulseAnim }] }]}>
                   <Bike size={42} color={Colors.primary} strokeWidth={2.4} />
                 </Animated.View>
                 <Text style={styles.mapText}>{trackingHeadline(order)}</Text>
+                {mapRegion ? (
+                  <TouchableOpacity style={styles.openMapButton} onPress={openExternalMap}>
+                    <Text style={styles.openMapText}>Open in Google Maps</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             )}
             <View style={styles.mapCard}>
@@ -204,6 +220,20 @@ export default function OrderTrackingScreen({ navigation, route }) {
       )}
     </View>
   );
+}
+
+function getNativeMaps() {
+  if (!ENABLE_NATIVE_MAPS || Platform.OS === 'web') return null;
+  try {
+    const maps = require('react-native-maps');
+    return {
+      MapView: maps.default,
+      Marker: maps.Marker,
+      Polyline: maps.Polyline,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function trackingHeadline(order) {
@@ -302,6 +332,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     ...Shadow.sm,
   },
+  openMapButton: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  openMapText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '800' },
   mapText: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.primary },
   mapEta: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
   section: { paddingHorizontal: Spacing.lg, paddingTop: 20, marginBottom: 4 },
