@@ -19,7 +19,20 @@ const CATEGORY_COLORS = {
   'WAREHOUSE':   { bg: '#E6F4EA',             text: '#137333',         icon: '🏭' },
 };
 
-export default function RentalsScreen({ navigation }) {
+const UNAVAILABLE_STATUS = ['SOLD', 'RENTED'];
+
+function isUnavailableProperty(property) {
+  return UNAVAILABLE_STATUS.includes(property?.status);
+}
+
+function propertyAvailabilityLabel(property) {
+  if (property?.status === 'SOLD') return 'Sold';
+  if (property?.status === 'RENTED') return 'Rented';
+  return '';
+}
+
+export default function RentalsScreen({ navigation, route }) {
+  const searchTerm = String(route.params?.search || '').trim();
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -28,7 +41,7 @@ export default function RentalsScreen({ navigation }) {
 
   const loadProperties = useCallback(async () => {
     try {
-      const response = await getLiveProperties();
+      const response = await getLiveProperties(searchTerm ? { search: searchTerm } : {});
       setProperties(response.properties || []);
 
       try {
@@ -50,7 +63,7 @@ export default function RentalsScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchTerm]);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,7 +88,9 @@ export default function RentalsScreen({ navigation }) {
         <BackButton onPress={() => navigation.goBack()} />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Rentals & Sales</Text>
-          <Text style={styles.headerSub}>Find your perfect property in town</Text>
+          <Text style={styles.headerSub}>
+            {searchTerm ? `Search results for "${searchTerm}"` : 'Find your perfect property in town'}
+          </Text>
         </View>
       </View>
 
@@ -123,6 +138,11 @@ export default function RentalsScreen({ navigation }) {
                       onPress={() => navigation.navigate('RentalDetail', { rentalId: nearby.id })}
                     >
                       <View style={[styles.adImageWrap, { backgroundColor: Colors.secondaryLight }]}>
+                        {isUnavailableProperty(nearby) && (
+                          <View style={styles.availabilityBadge}>
+                            <Text style={styles.availabilityBadgeText}>{propertyAvailabilityLabel(nearby)}</Text>
+                          </View>
+                        )}
                         {nearbyImage ? <Image source={{ uri: nearbyImage }} style={styles.adImage} /> : <Text style={styles.adEmoji}>🏠</Text>}
                       </View>
                       <View style={styles.adInfo}>
@@ -167,6 +187,11 @@ export default function RentalsScreen({ navigation }) {
                       }
                     >
                       <View style={[styles.adImageWrap, { backgroundColor: adConfig.bg }]}>
+                        {isUnavailableProperty(ad) && (
+                          <View style={styles.availabilityBadge}>
+                            <Text style={styles.availabilityBadgeText}>{propertyAvailabilityLabel(ad)}</Text>
+                          </View>
+                        )}
                         {adImg ? (
                           <Image
                             source={{ uri: adImg }}
@@ -238,6 +263,12 @@ export default function RentalsScreen({ navigation }) {
                         ]}
                       >
                         <Text style={styles.verifiedText}>🔥 Sponsored</Text>
+                      </View>
+                    )}
+
+                    {isUnavailableProperty(rental) && (
+                      <View style={styles.availabilityBadge}>
+                        <Text style={styles.availabilityBadgeText}>{propertyAvailabilityLabel(rental)}</Text>
                       </View>
                     )}
 
@@ -376,6 +407,21 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   typePillText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '800' },
+  availabilityBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: Colors.danger,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    zIndex: 20,
+  },
+  availabilityBadgeText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '900',
+  },
 
   rentalInfo: { padding: 14, gap: 8 },
   infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

@@ -8,9 +8,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import LogoBrand from '../components/LogoBrand';
 import { getCategories } from '../services/categories';
 import { getProducts } from '../services/products';
+import { getLiveProperties } from '../services/properties';
+import { getServiceCatalog } from '../services/serviceMarketplace';
 import { getAddresses } from '../services/addresses';
 import { getProfile } from '../services/profile';
 import { getUploadUrl } from '../services/api';
+import { getWallet } from '../services/wallet';
+import { getNotifications } from '../services/notifications';
+import { getSettings } from '../services/settings';
+import { getHomeOffers } from '../services/homeOffers';
+
+const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
 const CATEGORIES = [
   { id: '1',  icon: '🛒', label: 'Groceries',         screen: 'Grocery',      bg: '#FFF0F0' },
@@ -46,27 +54,30 @@ function ActionIcon({ action, size = 24 }) {
   return <Icon name={action.icon} size={size} color={action.iconColor} />;
 }
 
-const OFFERS = [
+const FALLBACK_OFFERS = [
   {
     id: '1',
     title: '10% Cashback',
-    sub: 'On first wallet recharge',
-    gradient: [Colors.primary, Colors.primaryDark],
-    emoji: '💰',
+    subtitle: 'On first order',
+    color: Colors.primary,
+    icon: 'wallet',
+    buttonLabel: 'Claim',
   },
   {
     id: '2',
-    title: '₹50 Reward',
-    sub: 'Refer a friend & earn',
-    gradient: [Colors.secondary, Colors.secondaryDark],
-    emoji: '🎁',
+    title: 'Rs 50 Reward',
+    subtitle: 'Refer and earn',
+    color: Colors.secondary,
+    icon: 'users',
+    buttonLabel: 'Refer',
   },
   {
     id: '3',
     title: 'Free Delivery',
-    sub: 'On orders above ₹299',
-    gradient: ['#FF6B00', '#E65C00'],
-    emoji: '🚚',
+    subtitle: 'On orders above Rs 289',
+    color: '#FF6B00',
+    icon: 'truck',
+    buttonLabel: 'Claim',
   },
 ];
 
@@ -133,6 +144,9 @@ const TRENDING = [
 
 export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState('');
@@ -140,6 +154,10 @@ export default function HomeScreen({ navigation }) {
   const [trendingLoading, setTrendingLoading] = useState(true);
   const [defaultAddress, setDefaultAddress] = useState(null);
   const [user, setUser] = useState(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [nextDeliverySlot, setNextDeliverySlot] = useState(() => getNextDeliverySlot(DEFAULT_SLOT_TIMES));
+  const [homeOffers, setHomeOffers] = useState(FALLBACK_OFFERS);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -165,29 +183,84 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
+  const loadHomeOffers = useCallback(async () => {
+    try {
+      const offers = await getHomeOffers();
+      setHomeOffers(Array.isArray(offers) && offers.length ? offers : FALLBACK_OFFERS);
+    } catch {
+      setHomeOffers(FALLBACK_OFFERS);
+    }
+  }, []);
+
   const loadHeaderData = useCallback(async () => {
-    const [profile, addresses] = await Promise.all([
+    const [profile, addresses, wallet, notifications, settings] = await Promise.all([
       getProfile().catch(() => null),
       getAddresses().catch(() => []),
+      getWallet().catch(() => null),
+      getNotifications(1, 1).catch(() => null),
+      getSettings().catch(() => ({})),
     ]);
 
     setUser(profile);
     setDefaultAddress(addresses.find((address) => address.isDefault) || addresses[0] || null);
+    setWalletBalance(Number(wallet?.wallet?.balance || 0));
+    setUnreadNotifications(Number(notifications?.unread || 0));
+    setNextDeliverySlot(getNextDeliverySlot(settings?.deliverySlotTimes));
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadCategories();
       loadTrending();
+      loadHomeOffers();
       loadHeaderData();
-    }, [loadCategories, loadTrending, loadHeaderData]),
+    }, [loadCategories, loadTrending, loadHomeOffers, loadHeaderData]),
   );
 
   const openTrending = (product) =>
     navigation.navigate('ProductDetail', { productId: product.id, product });
+  const runSearch = async () => {
+    const term = search.trim();
+    if (!term) {
+      setSearchResults(null);
+      setSearchError('');
+      return;
+    }
+
+    try {
+      setSearching(true);
+      setSearchError('');
+      const [productsResponse, propertiesResponse, serviceCatalog] = await Promise.all([
+        getProducts({ page: 1, limit: 6, search: term, stock: 'in' }).catch(() => ({ products: [] })),
+        getLiveProperties({ search: term, limit: 6 }).catch(() => ({ properties: [] })),
+        getServiceCatalog().catch(() => []),
+      ]);
+
+      setSearchResults({
+        term,
+        products: (productsResponse.products || []).slice(0, 3),
+        properties: (propertiesResponse.properties || []).slice(0, 3),
+        services: filterServices(serviceCatalog, term).slice(0, 3),
+      });
+    } catch (error) {
+      setSearchError(error?.message || 'Search failed');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearch('');
+    setSearchError('');
+    setSearchResults(null);
+  };
   const locationLabel = formatAddressLabel(defaultAddress);
   const profileImageUrl = user?.profileImage ? getUploadUrl('profiles', user.profileImage) : null;
   const profileInitial = (user?.name || 'S').charAt(0).toUpperCase();
+  const walletAmount = Number(walletBalance || 0).toLocaleString('en-IN', {
+    maximumFractionDigits: 0,
+  });
+  const notificationBadge = unreadNotifications > 99 ? '99+' : String(unreadNotifications);
 
   return (
     <View style={styles.container}>
@@ -209,14 +282,16 @@ export default function HomeScreen({ navigation }) {
         </View>
         <View style={styles.topRight}>
           <TouchableOpacity style={styles.walletChip} onPress={() => navigation.navigate('Wallet')}>
-            <Text style={styles.walletText}>💰 ₹240</Text>
+            <Text style={styles.walletText}>Rs {walletAmount}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => navigation.navigate('Notifications')}
           >
             <Text style={styles.iconBtnText}>🔔</Text>
-            <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
+            {unreadNotifications > 0 && (
+              <View style={styles.badge}><Text style={styles.badgeText}>{notificationBadge}</Text></View>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, styles.profileBtn]}
@@ -233,33 +308,112 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* ─── Search Bar ─── */}
+      {/* Search Bar */}
       <View style={styles.searchWrapper}>
         <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <TouchableOpacity onPress={runSearch} disabled={searching}>
+            <Text style={styles.searchIcon}>Search</Text>
+          </TouchableOpacity>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search groceries, services, parcels..."
+            placeholder="Search products, services, properties..."
             placeholderTextColor={Colors.textMuted}
             value={search}
             onChangeText={setSearch}
+            returnKeyType="search"
+            onSubmitEditing={runSearch}
           />
+          {search ? (
+            <TouchableOpacity onPress={clearSearch} style={styles.searchClear}>
+              <Text style={styles.searchClearText}>x</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
+
+      {searchResults || searching || searchError ? (
+        <View style={styles.searchResultsPanel}>
+          {searching ? (
+            <View style={styles.searchStateRow}>
+              <ActivityIndicator color={Colors.primary} size="small" />
+              <Text style={styles.searchStateText}>Searching...</Text>
+            </View>
+          ) : null}
+          {!searching && searchError ? <Text style={styles.searchStateText}>{searchError}</Text> : null}
+          {!searching && searchResults ? (
+            <>
+              <View style={styles.searchPanelHeader}>
+                <Text style={styles.searchPanelTitle}>Results for "{searchResults.term}"</Text>
+                <TouchableOpacity onPress={clearSearch}>
+                  <Text style={styles.searchPanelClose}>Close</Text>
+                </TouchableOpacity>
+              </View>
+              <SearchSection
+                title="Products"
+                emptyText="No products found"
+                actionText="See all"
+                onAction={() => navigation.navigate('Marketplace', { search: searchResults.term })}
+                items={searchResults.products}
+                renderItem={(product) => (
+                  <TouchableOpacity key={`product-${product.id}`} style={styles.searchResultRow} onPress={() => navigation.navigate('ProductDetail', { productId: product.id, product })}>
+                    <Text style={styles.searchResultType}>P</Text>
+                    <View style={styles.searchResultCopy}>
+                      <Text style={styles.searchResultTitle} numberOfLines={1}>{product.name}</Text>
+                      <Text style={styles.searchResultSub} numberOfLines={1}>Rs {Number(product.price || 0).toLocaleString('en-IN')} - {product.category}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+              <SearchSection
+                title="Properties"
+                emptyText="No properties found"
+                actionText="See all"
+                onAction={() => navigation.navigate('Rentals', { search: searchResults.term })}
+                items={searchResults.properties}
+                renderItem={(property) => (
+                  <TouchableOpacity key={`property-${property.id}`} style={styles.searchResultRow} onPress={() => navigation.navigate('RentalDetail', { rentalId: property.id })}>
+                    <Text style={styles.searchResultType}>R</Text>
+                    <View style={styles.searchResultCopy}>
+                      <Text style={styles.searchResultTitle} numberOfLines={1}>{property.title}</Text>
+                      <Text style={styles.searchResultSub} numberOfLines={1}>Rs {Number(property.price || 0).toLocaleString('en-IN')} - {property.address || property.category}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+              <SearchSection
+                title="Services"
+                emptyText="No services found"
+                actionText="See all"
+                onAction={() => navigation.navigate('PennyWorks', { search: searchResults.term })}
+                items={searchResults.services}
+                renderItem={(service) => (
+                  <TouchableOpacity key={`service-${service.package.id}`} style={styles.searchResultRow} onPress={() => navigation.navigate('ServiceCheckout', { servicePackage: service.package, category: service.category })}>
+                    <Text style={styles.searchResultType}>S</Text>
+                    <View style={styles.searchResultCopy}>
+                      <Text style={styles.searchResultTitle} numberOfLines={1}>{service.package.name}</Text>
+                      <Text style={styles.searchResultSub} numberOfLines={1}>Rs {Number(service.package.price || 0).toLocaleString('en-IN')} - {service.category.name}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
 
       <ScrollView showsVerticalScrollIndicator={false}>
 
         {/* ─── Delivery Slot Banner ─── */}
         <View style={styles.slotBanner}>
           <View style={styles.slotLeft}>
-            <Text style={styles.slotEmoji}>🌆</Text>
+              <Text style={styles.slotEmoji}>🌆</Text>
             <View>
               <Text style={styles.slotLabel}>Next Delivery Slot</Text>
-              <Text style={styles.slotTime}>EVENING  5 PM – 9 PM</Text>
+              <Text style={styles.slotTime}>{nextDeliverySlot.label}</Text>
             </View>
           </View>
           <View style={styles.slotBadge}>
-            <Text style={styles.slotBadgeText}>Today</Text>
+            <Text style={styles.slotBadgeText}>{nextDeliverySlot.dayLabel}</Text>
           </View>
         </View>
 
@@ -267,17 +421,20 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Offers for You 🎉</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {OFFERS.map((offer) => (
+            {homeOffers.map((offer) => (
               <TouchableOpacity
                 key={offer.id}
-                style={[styles.offerCard, { backgroundColor: offer.gradient[0] }]}
+                style={[styles.offerCard, { backgroundColor: offer.color || Colors.primary }]}
                 activeOpacity={0.88}
               >
-                <Text style={styles.offerEmoji}>{offer.emoji}</Text>
+                <View style={styles.offerIconBadge}>
+                  <Text style={styles.offerIconText}>{iconForOffer(offer.icon)}</Text>
+                </View>
                 <Text style={styles.offerTitle}>{offer.title}</Text>
-                <Text style={styles.offerSub}>{offer.sub}</Text>
+                <Text style={styles.offerSub}>{offer.subtitle}</Text>
+                {offer.code ? <Text style={styles.offerCode}>{offer.code}</Text> : null}
                 <View style={styles.claimBtn}>
-                  <Text style={styles.claimText}>Claim →</Text>
+                  <Text style={styles.claimText}>{offer.buttonLabel || 'Claim'} -></Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -429,6 +586,83 @@ function formatAddressLabel(address) {
   return [area, city].filter(Boolean).join(', ') || address.pincode || 'Saved address';
 }
 
+function SearchSection({ title, items, emptyText, actionText, onAction, renderItem }) {
+  return (
+    <View style={styles.searchSection}>
+      <View style={styles.searchSectionHeader}>
+        <Text style={styles.searchSectionTitle}>{title}</Text>
+        <TouchableOpacity onPress={onAction}>
+          <Text style={styles.searchSectionAction}>{actionText}</Text>
+        </TouchableOpacity>
+      </View>
+      {items.length ? items.map(renderItem) : <Text style={styles.searchEmpty}>{emptyText}</Text>}
+    </View>
+  );
+}
+
+function filterServices(catalog = [], term = '') {
+  const query = term.toLowerCase();
+  const matches = [];
+
+  catalog.forEach((category) => {
+    const categoryText = `${category.name || ''} ${category.description || ''}`.toLowerCase();
+    (category.packages || []).forEach((servicePackage) => {
+      const packageText = `${servicePackage.name || ''} ${servicePackage.description || ''}`.toLowerCase();
+      if (categoryText.includes(query) || packageText.includes(query)) {
+        matches.push({ category, package: servicePackage });
+      }
+    });
+  });
+
+  return matches;
+}
+
+function getNextDeliverySlot(slotTimes = DEFAULT_SLOT_TIMES, now = new Date()) {
+  const labels = (Array.isArray(slotTimes) && slotTimes.length ? slotTimes : DEFAULT_SLOT_TIMES)
+    .map((slot) => String(slot || '').trim())
+    .filter(Boolean);
+  const fallbackLabel = labels[0] || 'Available soon';
+  const parsedSlots = labels
+    .map((label, index) => ({ label, index, minutes: getSlotStartMinutes(label) }))
+    .filter((slot) => Number.isFinite(slot.minutes))
+    .sort((a, b) => a.minutes - b.minutes || a.index - b.index);
+
+  if (!parsedSlots.length) {
+    return { label: fallbackLabel, dayLabel: 'Today' };
+  }
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const nextToday = parsedSlots.find((slot) => slot.minutes > currentMinutes);
+
+  return {
+    label: nextToday?.label || parsedSlots[0].label,
+    dayLabel: nextToday ? 'Today' : 'Tomorrow',
+  };
+}
+
+function getSlotStartMinutes(label) {
+  const match = String(label).match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (!match) return Number.NaN;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  const period = match[3]?.toUpperCase();
+
+  if (hours > 23 || minutes > 59) return Number.NaN;
+  if (period === 'PM' && hours < 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+}
+
+function iconForOffer(icon = '') {
+  if (icon === 'wallet') return 'Rs';
+  if (icon === 'truck') return 'D';
+  if (icon === 'users') return 'R';
+  if (icon === 'tag') return '%';
+  return 'G';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
@@ -524,6 +758,52 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '500',
   },
+  searchClear: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearText: { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '900' },
+  searchResultsPanel: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: -6,
+    marginBottom: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+    maxHeight: 430,
+    ...Shadow.md,
+  },
+  searchStateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchStateText: { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '700' },
+  searchPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  searchPanelTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
+  searchPanelClose: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
+  searchSection: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 9, marginTop: 9 },
+  searchSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  searchSectionTitle: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '900', textTransform: 'uppercase' },
+  searchSectionAction: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
+  searchResultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  searchResultType: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primaryLight,
+    color: Colors.primary,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    fontSize: FontSize.xs,
+    fontWeight: '900',
+  },
+  searchResultCopy: { flex: 1 },
+  searchResultTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800' },
+  searchResultSub: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
+  searchEmpty: { color: Colors.textMuted, fontSize: FontSize.xs, paddingVertical: 4 },
 
   /* Slot banner */
   slotBanner: {
@@ -579,9 +859,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     ...Shadow.md,
   },
-  offerEmoji: { fontSize: 28, marginBottom: 6 },
+  offerIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  offerIconText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   offerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.white },
   offerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  offerCode: {
+    marginTop: 7,
+    color: Colors.white,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
   claimBtn: {
     marginTop: 10,
     backgroundColor: 'rgba(255,255,255,0.2)',

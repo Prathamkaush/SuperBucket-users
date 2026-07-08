@@ -5,6 +5,14 @@ export function getServiceCatalog() {
   return apiRequest('/services/catalog');
 }
 
+export function getServiceProviders({ categoryId, page = 1, limit = 10 } = {}) {
+  const query = new URLSearchParams();
+  if (categoryId) query.set('categoryId', String(categoryId));
+  query.set('page', String(page));
+  query.set('limit', String(limit));
+  return apiRequest(`/services/providers?${query.toString()}`);
+}
+
 export function createServiceBooking(payload) {
   return authenticatedRequest('/services/bookings', {
     method: 'POST',

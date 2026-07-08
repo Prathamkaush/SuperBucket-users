@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getProducts, getProductTypes } from '../services/products';
@@ -78,6 +79,7 @@ export default function MarketplaceScreen({ navigation, route }) {
   const isTabScreen = route.name === 'Grocery';
   const categoryId = route.params?.categoryId;
   const categoryName = route.params?.categoryName;
+  const initialSearch = route.params?.search || '';
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
@@ -86,14 +88,20 @@ export default function MarketplaceScreen({ navigation, route }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [filterVisible, setFilterVisible] = useState(false);
-  const [search, setSearch] = useState('');
-  const [submittedSearch, setSubmittedSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
+  const [submittedSearch, setSubmittedSearch] = useState(initialSearch);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     setSelectedTypeId(null);
   }, [categoryId]);
+
+  useEffect(() => {
+    const nextSearch = route.params?.search || '';
+    setSearch(nextSearch);
+    setSubmittedSearch(nextSearch);
+  }, [route.params?.search]);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -207,7 +215,7 @@ export default function MarketplaceScreen({ navigation, route }) {
           style={styles.cartButton}
           onPress={() => navigation.navigate('MainTabs', { screen: 'Cart' })}
         >
-          <Text style={styles.cartButtonText}>Cart</Text>
+          <Feather name="shopping-cart" size={20} color={Colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -539,14 +547,15 @@ const styles = StyleSheet.create({
   headerTitle: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '800' },
   headerSubtitle: { color: Colors.textSecondary, fontSize: FontSize.xs },
   cartButton: {
+    width: 40,
+    height: 40,
     borderRadius: Radius.full,
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: '#F3B9BE',
-    paddingHorizontal: 13,
-    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cartButtonText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800' },
   searchBox: {
     margin: Spacing.lg,
     marginBottom: 4,

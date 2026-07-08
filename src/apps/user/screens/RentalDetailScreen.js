@@ -68,8 +68,14 @@ export default function RentalDetailScreen({ route, navigation }) {
     .filter(Boolean)
     .map((fileName) => getUploadUrl('properties', fileName));
   const formattedPrice = parseFloat(property.price).toLocaleString('en-IN');
+  const unavailable = ['SOLD', 'RENTED'].includes(property.status);
+  const availabilityLabel = property.status === 'SOLD' ? 'Sold' : property.status === 'RENTED' ? 'Rented' : 'Available';
 
   const handleCall = () => {
+    if (unavailable) {
+      Alert.alert('Property unavailable', `This property is already ${availabilityLabel.toLowerCase()}.`);
+      return;
+    }
     const phone = property.owner?.phone;
     if (!phone) {
       Alert.alert('Unavailable', 'Owner phone number is not listed.');
@@ -81,6 +87,10 @@ export default function RentalDetailScreen({ route, navigation }) {
   };
 
   const handleInquirySubmit = async () => {
+    if (unavailable) {
+      Alert.alert('Property unavailable', `This property is already ${availabilityLabel.toLowerCase()}.`);
+      return;
+    }
     if (!message.trim()) {
       Alert.alert('Validation Error', 'Please type a message to send to the owner.');
       return;
@@ -98,6 +108,10 @@ export default function RentalDetailScreen({ route, navigation }) {
   };
 
   const handleScheduleVisit = () => {
+    if (unavailable) {
+      Alert.alert('Property unavailable', `This property is already ${availabilityLabel.toLowerCase()}.`);
+      return;
+    }
     Alert.prompt(
       'Schedule Visit',
       'Enter preferred date and time (e.g. Tomorrow, 5 PM):',
@@ -155,6 +169,11 @@ export default function RentalDetailScreen({ route, navigation }) {
               <Text style={styles.verifiedText}>Verified</Text>
             </View>
           )}
+          {unavailable && (
+            <View style={styles.unavailableBadge}>
+              <Text style={styles.unavailableText}>{availabilityLabel}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.summary}>
@@ -166,6 +185,13 @@ export default function RentalDetailScreen({ route, navigation }) {
             ₹{formattedPrice}{property.mode === 'RENT' ? '/mo' : ''}
           </Text>
         </View>
+
+        {unavailable && (
+          <View style={styles.unavailableCard}>
+            <Text style={styles.unavailableTitle}>This property is {availabilityLabel.toLowerCase()}</Text>
+            <Text style={styles.unavailableCopy}>You can still view the details, but owner calls, messages, and visit requests are closed.</Text>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Place Details</Text>
@@ -194,6 +220,7 @@ export default function RentalDetailScreen({ route, navigation }) {
           </View>
         )}
 
+        {!unavailable && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ask the Owner a Question</Text>
           <TextInput
@@ -216,13 +243,14 @@ export default function RentalDetailScreen({ route, navigation }) {
             )}
           </TouchableOpacity>
         </View>
+        )}
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.secondaryBtn} onPress={handleCall}>
+        <TouchableOpacity style={[styles.secondaryBtn, unavailable && styles.disabledOutline]} onPress={handleCall} disabled={unavailable}>
           <Text style={styles.secondaryBtnText}>Call Owner</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleScheduleVisit}>
+        <TouchableOpacity style={[styles.primaryBtn, unavailable && styles.btnDisabled]} onPress={handleScheduleVisit} disabled={unavailable}>
           <Text style={styles.primaryBtnText}>Schedule Visit</Text>
         </TouchableOpacity>
       </View>
@@ -294,6 +322,17 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   verifiedText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
+  unavailableBadge: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    backgroundColor: Colors.danger,
+    borderRadius: Radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  unavailableText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   summary: {
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
@@ -324,6 +363,27 @@ const styles = StyleSheet.create({
   factLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700' },
   factValue: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
   notes: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 21, fontWeight: '600' },
+  unavailableCard: {
+    backgroundColor: Colors.dangerLight,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.danger,
+    padding: Spacing.lg,
+    marginTop: Spacing.lg,
+    ...Shadow.sm,
+  },
+  unavailableTitle: {
+    color: Colors.danger,
+    fontSize: FontSize.md,
+    fontWeight: '900',
+  },
+  unavailableCopy: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginTop: 6,
+  },
   
   messageInput: {
     backgroundColor: Colors.gray50,
@@ -374,6 +434,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.secondary,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  disabledOutline: {
+    borderColor: Colors.gray400,
+    backgroundColor: Colors.gray100,
   },
   secondaryBtnText: { color: Colors.secondary, fontSize: FontSize.sm, fontWeight: '900' },
   primaryBtn: {

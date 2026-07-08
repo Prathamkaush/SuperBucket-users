@@ -8,6 +8,13 @@ export function getMyOrder(orderId) {
   return authenticatedRequest(`/orders/my/${orderId}`);
 }
 
+export function reorderOrder(orderId) {
+  return authenticatedRequest(`/orders/${orderId}/reorder`, {
+    method: 'POST',
+    timeoutMs: 20000,
+  });
+}
+
 export function placeOrder({
   addressId,
   address,

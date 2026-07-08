@@ -3,9 +3,18 @@ import { authenticatedRequest } from './auth';
 export function normalizeSpace(item) {
   if (!item) return null;
   if ('location' in item) return item;
+  const statusLabel = {
+    LIVE: 'Live',
+    REVIEW: 'Review',
+    SOLD: 'Sold',
+    RENTED: 'Rented',
+    REJECTED: 'Rejected',
+    DRAFT: 'Draft',
+  }[item.status] || 'Draft';
   return {
     ...item,
-    status: item.status === 'LIVE' ? 'Live' : (item.status === 'REVIEW' ? 'Review' : 'Draft'),
+    rawStatus: item.status,
+    status: statusLabel,
     location: item.address,
     priceLabel: item.mode === 'SELL' || item.mode === 'Sell'
       ? `Rs ${parseFloat(item.price).toLocaleString('en-IN')}`
@@ -50,6 +59,13 @@ export function advertiseProperty(id) {
   });
 }
 
+export function updatePropertyStatus(id, status) {
+  return authenticatedRequest(`/properties/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+}
 
 export function updateLeadStatus(leadId, status) {
   return authenticatedRequest(`/properties/leads/${leadId}`, {

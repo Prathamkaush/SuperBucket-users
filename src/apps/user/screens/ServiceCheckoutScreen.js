@@ -14,7 +14,7 @@ function nextSlots() {
 }
 
 export default function ServiceCheckoutScreen({ navigation, route }) {
-  const { servicePackage, category } = route.params;
+  const { servicePackage, category, provider } = route.params;
   const slots = useMemo(nextSlots, []);
   const [addresses, setAddresses] = useState([]);
   const [addressId, setAddressId] = useState(null);
@@ -38,8 +38,8 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
     }
     try {
       setSubmitting(true);
-      await createServiceBooking({ packageId: servicePackage.id, scheduledAt: slot.toISOString(), address, customerNote: note });
-      Alert.alert('Booking requested', 'Nearby providers can now accept your job.', [
+      await createServiceBooking({ packageId: servicePackage.id, providerId: provider?.id, scheduledAt: slot.toISOString(), address, customerNote: note });
+      Alert.alert('Booking requested', provider ? `${provider.name} has been assigned to your booking.` : 'Nearby providers can now accept your job.', [
         { text: 'View booking', onPress: () => navigation.replace('ServiceBookings') },
       ]);
     } catch (e) {
@@ -53,7 +53,24 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
       <View style={styles.header}><BackButton onPress={() => navigation.goBack()} /><Text style={styles.headerTitle}>Confirm booking</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View> : (
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.summary}><Text style={styles.eyebrow}>{category.name}</Text><Text style={styles.service}>{servicePackage.name}</Text><Text style={styles.description}>{servicePackage.description}</Text><View style={styles.summaryBottom}><Text>{servicePackage.durationMinutes} minutes</Text><Text style={styles.price}>₹{Number(servicePackage.price).toFixed(0)}</Text></View></View>
+          <View style={styles.summary}>
+            <Text style={styles.eyebrow}>{category.name}</Text>
+            <Text style={styles.service}>{servicePackage.name}</Text>
+            <Text style={styles.description}>{servicePackage.description}</Text>
+            {provider ? (
+              <View style={styles.providerBox}>
+                <Text style={styles.providerLabel}>Selected worker</Text>
+                <Text style={styles.providerName}>{provider.name}</Text>
+                <Text style={styles.providerMeta}>
+                  {provider.averageRating ? `${provider.averageRating} stars` : 'New'} - {provider.experienceYears || 0} yrs exp
+                </Text>
+              </View>
+            ) : null}
+            <View style={styles.summaryBottom}>
+              <Text>{servicePackage.durationMinutes} minutes</Text>
+              <Text style={styles.price}>Rs {Number(servicePackage.price).toFixed(0)}</Text>
+            </View>
+          </View>
           <Text style={styles.sectionTitle}>Choose time</Text>
           <View style={styles.options}>{slots.map((item) => <TouchableOpacity key={item.toISOString()} style={[styles.option, slot === item && styles.optionActive]} onPress={() => setSlot(item)}><Text style={[styles.optionText, slot === item && styles.optionTextActive]}>{item.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</Text></TouchableOpacity>)}</View>
           <View style={styles.sectionRow}><Text style={styles.sectionTitle}>Service address</Text><TouchableOpacity onPress={() => navigation.navigate('Location')}><Text style={styles.link}>Add address</Text></TouchableOpacity></View>
@@ -61,7 +78,7 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
           {!addresses.length ? <Text style={styles.empty}>No saved address found.</Text> : null}
           <Text style={styles.sectionTitle}>Anything we should know?</Text>
           <TextInput style={styles.note} multiline value={note} onChangeText={setNote} placeholder="Describe the issue (optional)" placeholderTextColor={Colors.textMuted} />
-          <TouchableOpacity style={[styles.confirm, submitting && styles.disabled]} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.confirmText}>Request booking · ₹{Number(servicePackage.price).toFixed(0)}</Text>}</TouchableOpacity>
+          <TouchableOpacity style={[styles.confirm, submitting && styles.disabled]} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.confirmText}>Request booking - Rs {Number(servicePackage.price).toFixed(0)}</Text>}</TouchableOpacity>
           <Text style={styles.disclaimer}>The price is set by Superbucket. Replacement parts, if required, must be approved by you separately.</Text>
         </ScrollView>
       )}
@@ -74,6 +91,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: FontSize.xl, fontWeight: '900' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, content: { padding: Spacing.lg, paddingBottom: 50 },
   summary: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: 18, ...Shadow.sm }, eyebrow: { color: Colors.secondary, fontWeight: '800', fontSize: FontSize.xs }, service: { fontSize: FontSize.xl, fontWeight: '900', marginTop: 5 },
   description: { color: Colors.textSecondary, marginTop: 6, lineHeight: 19 }, summaryBottom: { marginTop: 14, flexDirection: 'row', justifyContent: 'space-between' }, price: { color: Colors.primary, fontWeight: '900', fontSize: FontSize.lg },
+  providerBox: { marginTop: 14, borderRadius: Radius.md, backgroundColor: Colors.primaryLight, padding: 12 },
+  providerLabel: { color: Colors.textMuted, fontSize: FontSize.xxs, fontWeight: '900', textTransform: 'uppercase' },
+  providerName: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900', marginTop: 3 },
+  providerMeta: { color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '800', marginTop: 3 },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '900', marginTop: 22, marginBottom: 10 }, sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, link: { color: Colors.secondary, fontWeight: '800', marginTop: 14 },
   options: { flexDirection: 'row', gap: 8 }, option: { flex: 1, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, padding: 10, borderRadius: Radius.md }, optionActive: { backgroundColor: Colors.secondaryLight, borderColor: Colors.secondary }, optionText: { textAlign: 'center', fontSize: FontSize.xs, fontWeight: '700' }, optionTextActive: { color: Colors.secondary },
   address: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 14, marginBottom: 8 }, addressActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight }, addressName: { fontWeight: '800' }, addressText: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4, lineHeight: 17 }, empty: { color: Colors.textMuted },

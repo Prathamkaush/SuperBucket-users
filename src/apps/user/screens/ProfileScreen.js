@@ -38,7 +38,7 @@ const MENU_ITEMS = [
   { label: 'My Properties', screen: 'RenterPortal', Icon: House },
   { label: 'Provider Dashboard', screen: 'ProviderPortal', Icon: BriefcaseBusiness },
   { label: 'My Wallet', screen: 'Wallet', Icon: WalletCards },
-  { label: 'Help Center', screen: null, Icon: CircleQuestionMark },
+  { label: 'Help Center', screen: 'ContactSupport', Icon: CircleQuestionMark },
   { label: 'Logout', screen: 'Login', Icon: LogOut, danger: true },
 ];
 

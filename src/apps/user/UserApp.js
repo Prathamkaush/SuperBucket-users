@@ -38,6 +38,7 @@ import OrderTrackingScreen from './screens/OrderTrackingScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ProfileScreen     from './screens/ProfileScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import ContactSupportScreen from './screens/ContactSupportScreen';
 import AdvertiseBusinessScreen from './screens/AdvertiseBusinessScreen';
 import RenterDashboardScreen from '../renter/screens/RenterDashboardScreen';
 import RenterListingsScreen from '../renter/screens/RenterListingsScreen';
@@ -315,6 +316,7 @@ export default function UserApp() {
         <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
+        <Stack.Screen name="ContactSupport" component={ContactSupportScreen} />
         <Stack.Screen name="AdvertiseBusiness" component={AdvertiseBusinessScreen} />
         <Stack.Screen name="RenterPortal"  component={RenterPortal} />
         <Stack.Screen name="ProviderPortal" component={ProviderPortal} />

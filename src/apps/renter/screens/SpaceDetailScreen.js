@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Image, Alert, ActivityIndicator, Dimensions } from 'react-native';
-import { deleteProperty, normalizeSpace, advertiseProperty } from '../services/properties';
+import { deleteProperty, normalizeSpace, advertiseProperty, updatePropertyStatus } from '../services/properties';
 import { getUploadUrl } from '../services/api';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 import BackButton from '../components/BackButton';
@@ -13,6 +13,8 @@ export default function SpaceDetailScreen({ route, navigation }) {
   const [deleting, setDeleting] = useState(false);
   const [isAdvertised, setIsAdvertised] = useState(rawSpace?.isAdvertised || false);
   const [promoting, setPromoting] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(toRawStatus(rawSpace?.rawStatus || rawSpace?.status || space?.rawStatus || 'DRAFT'));
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const handlePromote = () => {
     Alert.alert(
@@ -36,6 +38,33 @@ export default function SpaceDetailScreen({ route, navigation }) {
           }
         }
       ]
+    );
+  };
+
+  const handleStatusChange = (nextStatus) => {
+    const label = nextStatus === 'LIVE' ? 'available' : nextStatus.toLowerCase();
+    Alert.alert(
+      'Update listing status',
+      `Mark this property as ${label}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: async () => {
+            try {
+              setStatusUpdating(true);
+              const updated = await updatePropertyStatus(space.id, nextStatus);
+              const rawStatus = toRawStatus(updated.status);
+              setCurrentStatus(rawStatus);
+              Alert.alert('Status updated', `Listing marked as ${statusLabel(rawStatus)}.`);
+            } catch (error) {
+              Alert.alert('Could not update status', error.message || 'Please try again');
+            } finally {
+              setStatusUpdating(false);
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -117,9 +146,34 @@ export default function SpaceDetailScreen({ route, navigation }) {
             <Text style={styles.price}>{space.priceLabel}</Text>
           </View>
           <View style={styles.statusPill}>
-            <Text style={styles.statusText}>{space.status}</Text>
+            <Text style={styles.statusText}>{statusLabel(currentStatus)}</Text>
           </View>
         </View>
+
+        {['LIVE', 'SOLD', 'RENTED'].includes(currentStatus) ? (
+          <View style={styles.statusCard}>
+            <Text style={styles.cardTitle}>Listing status</Text>
+            <Text style={styles.cardCopy}>Mark this property unavailable once it is sold or rented. Buyers can still see it, but cannot send new leads.</Text>
+            <View style={styles.statusActions}>
+              {[
+                { label: 'Available', value: 'LIVE' },
+                { label: 'Sold', value: 'SOLD' },
+                { label: 'Rented', value: 'RENTED' },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.value}
+                  style={[styles.statusAction, currentStatus === item.value && styles.statusActionActive, statusUpdating && styles.btnDisabled]}
+                  disabled={statusUpdating || currentStatus === item.value}
+                  onPress={() => handleStatusChange(item.value)}
+                >
+                  <Text style={[styles.statusActionText, currentStatus === item.value && styles.statusActionTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.grid}>
           <View style={styles.infoBox}>
@@ -377,6 +431,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 20,
   },
+  statusCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    ...Shadow.sm,
+  },
+  statusActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  statusAction: {
+    flex: 1,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  statusActionActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+  },
+  statusActionText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '900',
+  },
+  statusActionTextActive: {
+    color: Colors.primary,
+  },
   amenities: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -456,3 +544,27 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 });
+
+function statusLabel(status) {
+  return {
+    LIVE: 'Live',
+    REVIEW: 'Review',
+    SOLD: 'Sold',
+    RENTED: 'Rented',
+    REJECTED: 'Rejected',
+    DRAFT: 'Draft',
+  }[status] || status || 'Draft';
+}
+
+function toRawStatus(status) {
+  const normalized = String(status || '').trim().toUpperCase();
+  return {
+    AVAILABLE: 'LIVE',
+    LIVE: 'LIVE',
+    REVIEW: 'REVIEW',
+    SOLD: 'SOLD',
+    RENTED: 'RENTED',
+    REJECTED: 'REJECTED',
+    DRAFT: 'DRAFT',
+  }[normalized] || 'DRAFT';
+}

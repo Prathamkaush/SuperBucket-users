@@ -21,6 +21,7 @@ import { getCart, removeCartItem, updateCartItem } from '../services/cart';
 import { getAddresses } from '../services/addresses';
 import { getMyOrder, placeOrder, previewOrder } from '../services/orders';
 import { getSettings } from '../services/settings';
+import { getWallet } from '../services/wallet';
 import { createRazorpayOrder, verifyRazorpayPayment } from '../services/payments';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
@@ -37,6 +38,7 @@ export default function CartScreen({ navigation }) {
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [deliveryMode, setDeliveryMode] = useState('INSTANT');
   const [paymentMethod, setPaymentMethod] = useState('COD');
+  const [walletBalance, setWalletBalance] = useState(0);
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [slotTimes, setSlotTimes] = useState(DEFAULT_SLOT_TIMES);
   const [selectedSlot, setSelectedSlot] = useState(DEFAULT_SLOT_TIMES[0]);
@@ -47,13 +49,15 @@ export default function CartScreen({ navigation }) {
 
   const loadCart = useCallback(async () => {
     try {
-      const [cartItems, savedAddresses, settings] = await Promise.all([
+      const [cartItems, savedAddresses, settings, walletData] = await Promise.all([
         getCart(),
         getAddresses().catch(() => []),
         getSettings().catch(() => ({})),
+        getWallet().catch(() => null),
       ]);
       setItems(cartItems);
       setAddresses(savedAddresses);
+      setWalletBalance(Number(walletData?.wallet?.balance || 0));
       const times = Array.isArray(settings.deliverySlotTimes) && settings.deliverySlotTimes.length
         ? settings.deliverySlotTimes
         : DEFAULT_SLOT_TIMES;
@@ -192,9 +196,17 @@ export default function CartScreen({ navigation }) {
         return;
       }
 
+      if (paymentMethod === 'WALLET' && walletBalance < total) {
+        Alert.alert(
+          'Insufficient wallet balance',
+          `Your wallet has ${money(walletBalance)}. Please add money or choose another payment method.`,
+        );
+        return;
+      }
+
       const order = await placeOrder({
         addressId: selectedAddressId,
-        paymentMethod: 'COD',
+        paymentMethod,
         deliveryMode,
         scheduledDeliveryAt: scheduled?.date.toISOString(),
         deliverySlotLabel: scheduled?.label,
@@ -449,6 +461,14 @@ export default function CartScreen({ navigation }) {
                   <Text style={styles.paymentTitle}>Online</Text>
                   <Text style={styles.paymentSub}>UPI, cards, wallets</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.paymentCard, paymentMethod === 'WALLET' && styles.paymentCardActive]}
+                  onPress={() => setPaymentMethod('WALLET')}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.paymentTitle}>Wallet Pay</Text>
+                  <Text style={styles.paymentSub}>Balance {money(walletBalance)}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
@@ -468,7 +488,13 @@ export default function CartScreen({ navigation }) {
                 <ActivityIndicator color={Colors.white} />
               ) : (
                 <Text style={styles.checkoutText}>
-                  {addresses.length ? (paymentMethod === 'RAZORPAY' ? 'PAY ONLINE' : 'PLACE ORDER') : 'ADD ADDRESS'}
+                  {addresses.length
+                    ? paymentMethod === 'RAZORPAY'
+                      ? 'PAY ONLINE'
+                      : paymentMethod === 'WALLET'
+                      ? 'PAY FROM WALLET'
+                      : 'PLACE ORDER'
+                    : 'ADD ADDRESS'}
                 </Text>
               )}
             </TouchableOpacity>

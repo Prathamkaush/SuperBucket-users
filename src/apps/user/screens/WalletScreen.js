@@ -7,12 +7,16 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  NativeModules,
+  TurboModuleRegistry,
 } from 'react-native';
+import RazorpayCheckout from 'react-native-razorpay';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
-import { addWalletCredit, getWallet } from '../services/wallet';
+import { createWalletTopupOrder, getWallet, verifyWalletTopupPayment } from '../services/wallet';
 
 const CREDIT_AMOUNTS = [100, 250, 500];
 
@@ -22,6 +26,7 @@ export default function WalletScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [customAmount, setCustomAmount] = useState('');
 
   const loadWallet = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -42,13 +47,44 @@ export default function WalletScreen({ navigation }) {
   }, [loadWallet]);
 
   const addCredit = async (amount) => {
+    const nextAmount = Number(amount);
+    if (!Number.isFinite(nextAmount) || nextAmount < 100) {
+      Alert.alert('Minimum amount', 'Please add at least Rs 100 to your wallet.');
+      return;
+    }
+
     setAdding(true);
     try {
-      await addWalletCredit(amount);
+      if (!isRazorpayNativeModuleAvailable()) {
+        throw new Error(
+          'Wallet top-up is not available in this app build. Create and install a new EAS development/preview build after adding Razorpay.',
+        );
+      }
+
+      const razorpayOrder = await createWalletTopupOrder(nextAmount);
+      const payment = await RazorpayCheckout.open({
+        key: razorpayOrder.key,
+        amount: razorpayOrder.amount,
+        currency: 'INR',
+        name: 'Superbuket',
+        description: 'Wallet top-up',
+        order_id: razorpayOrder.razorpayOrderId,
+        theme: { color: Colors.primary },
+      });
+      await verifyWalletTopupPayment({
+        razorpay_order_id: payment.razorpay_order_id,
+        razorpay_payment_id: payment.razorpay_payment_id,
+        razorpay_signature: payment.razorpay_signature,
+        amount: nextAmount,
+      });
       await loadWallet(true);
-      Alert.alert('Wallet credited', `Rs ${amount.toFixed(2)} added successfully.`);
+      setCustomAmount('');
+      Alert.alert('Wallet credited', `Rs ${nextAmount.toFixed(2)} added successfully.`);
     } catch (e) {
-      Alert.alert('Could not add credit', e.message || 'Try again');
+      const message = /cancel/i.test(e?.description || e?.message || '')
+        ? 'Payment was cancelled.'
+        : e.message || e.description || 'Try again';
+      Alert.alert('Could not add credit', message);
     } finally {
       setAdding(false);
     }
@@ -96,6 +132,24 @@ export default function WalletScreen({ navigation }) {
               </TouchableOpacity>
             ))}
           </View>
+          <View style={styles.customTopupBox}>
+            <TextInput
+              style={styles.customInput}
+              value={customAmount}
+              onChangeText={(value) => setCustomAmount(value.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="Enter custom amount"
+              placeholderTextColor="rgba(255,255,255,0.65)"
+            />
+            <TouchableOpacity
+              style={[styles.customAddBtn, adding && styles.customAddBtnDisabled]}
+              disabled={adding}
+              onPress={() => addCredit(Number(customAmount))}
+            >
+              {adding ? <ActivityIndicator color={Colors.primary} size="small" /> : <Text style={styles.customAddText}>Add</Text>}
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.minimumText}>Minimum top-up Rs 100</Text>
         </View>
 
         <View style={{ paddingHorizontal: Spacing.lg, paddingTop: 20 }}>
@@ -141,6 +195,10 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
+function isRazorpayNativeModuleAvailable() {
+  return Boolean(NativeModules.RNRazorpayCheckout || TurboModuleRegistry?.get?.('RNRazorpayCheckout'));
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
@@ -153,6 +211,32 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   actionIcon: { fontSize: 20, marginBottom: 4, color: Colors.white, fontWeight: '900' },
   actionText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '600' },
+  customTopupBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  customInput: {
+    flex: 1,
+    color: Colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: Radius.md,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+  },
+  customAddBtn: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+  },
+  customAddBtnDisabled: { opacity: 0.7 },
+  customAddText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '900' },
+  minimumText: { color: 'rgba(255,255,255,0.68)', fontSize: FontSize.xs, marginTop: 8 },
   sectionTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textPrimary, marginBottom: 12 },
   txCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.md, padding: 14, marginBottom: 8, ...Shadow.sm },
   txIcon: { width: 44, height: 44, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
