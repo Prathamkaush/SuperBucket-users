@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -144,6 +145,9 @@ export default function NotificationsScreen({ navigation }) {
                   {unread && <View style={[styles.unreadDot, { backgroundColor: accent }]} />}
                 </View>
                 <Text style={styles.notifBody} numberOfLines={2}>{notif.body}</Text>
+                {notif.imageUrl ? (
+                  <Image source={{ uri: notif.imageUrl }} style={styles.notifImage} resizeMode="cover" />
+                ) : null}
                 <Text style={styles.notifTime}>{formatTime(notif.createdAt)}</Text>
               </View>
             </TouchableOpacity>
@@ -271,6 +275,13 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
     lineHeight: 18,
+  },
+  notifImage: {
+    width: '100%',
+    height: 118,
+    borderRadius: Radius.md,
+    marginTop: 10,
+    backgroundColor: Colors.gray100,
   },
   notifTime: {
     fontSize: FontSize.xxs,

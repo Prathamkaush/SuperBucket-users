@@ -67,6 +67,17 @@ export default function RenterLeadsScreen() {
     );
   };
 
+  const updateLead = async (leadId, nextStatus) => {
+    try {
+      setLoading(true);
+      await updateLeadStatus(leadId, nextStatus);
+      await loadLeads();
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Could not update status');
+      setLoading(false);
+    }
+  };
+
   const handleCall = (phone) => {
     if (!phone) {
       Alert.alert('Error', 'No phone number available for this user');
@@ -179,6 +190,27 @@ export default function RenterLeadsScreen() {
                   >
                     <Text style={styles.primaryActionText}>Call now</Text>
                   </TouchableOpacity>
+                </View>
+
+                <View style={styles.workflowActions}>
+                  {[
+                    { label: 'Pending', value: 'PENDING' },
+                    { label: 'Visit booked', value: 'VISIT_BOOKED' },
+                    { label: 'Negotiating', value: 'NEGOTIATING' },
+                    { label: 'Needs callback', value: 'NEEDS_CALLBACK' },
+                    { label: 'Resolved', value: 'RESOLVED' },
+                  ].map((item) => (
+                    <TouchableOpacity
+                      key={item.value}
+                      style={[styles.workflowChip, lead.status === item.value && styles.workflowChipActive]}
+                      disabled={lead.status === item.value}
+                      onPress={() => updateLead(lead.id, item.value)}
+                    >
+                      <Text style={[styles.workflowChipText, lead.status === item.value && styles.workflowChipTextActive]}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
             ))
@@ -304,6 +336,31 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: Spacing.md,
+  },
+  workflowActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  workflowChip: {
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  workflowChipActive: {
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.secondaryLight,
+  },
+  workflowChipText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '900',
+  },
+  workflowChipTextActive: {
+    color: Colors.secondary,
   },
   secondaryAction: {
     flex: 1,

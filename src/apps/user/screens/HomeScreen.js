@@ -152,6 +152,8 @@ export default function HomeScreen({ navigation }) {
   const [categoriesError, setCategoriesError] = useState('');
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [nearbyProperties, setNearbyProperties] = useState([]);
+  const [nearbyPropertiesLoading, setNearbyPropertiesLoading] = useState(true);
   const [defaultAddress, setDefaultAddress] = useState(null);
   const [user, setUser] = useState(null);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -201,11 +203,26 @@ export default function HomeScreen({ navigation }) {
       getSettings().catch(() => ({})),
     ]);
 
+    const selectedAddress = addresses.find((address) => address.isDefault) || addresses[0] || null;
     setUser(profile);
-    setDefaultAddress(addresses.find((address) => address.isDefault) || addresses[0] || null);
+    setDefaultAddress(selectedAddress);
     setWalletBalance(Number(wallet?.wallet?.balance || 0));
     setUnreadNotifications(Number(notifications?.unread || 0));
     setNextDeliverySlot(getNextDeliverySlot(settings?.deliverySlotTimes));
+
+    try {
+      setNearbyPropertiesLoading(true);
+      if (selectedAddress?.pincode) {
+        const nearbyResponse = await getLiveProperties({ pincode: selectedAddress.pincode, limit: 8 });
+        setNearbyProperties(nearbyResponse.properties || []);
+      } else {
+        setNearbyProperties([]);
+      }
+    } catch {
+      setNearbyProperties([]);
+    } finally {
+      setNearbyPropertiesLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -493,6 +510,42 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Properties Near You</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Rentals', {
+                nearbyOnly: true,
+                pincode: defaultAddress?.pincode,
+              })}
+            >
+              <Text style={styles.sectionAction}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {nearbyPropertiesLoading ? (
+              <View style={styles.nearbyLoading}>
+                <ActivityIndicator color={Colors.secondary} />
+              </View>
+            ) : null}
+            {!nearbyPropertiesLoading && nearbyProperties.length === 0 ? (
+              <TouchableOpacity style={styles.nearbyEmptyCard} onPress={() => navigation.navigate('Location')}>
+                <Text style={styles.nearbyEmptyTitle}>No nearby properties yet</Text>
+                <Text style={styles.nearbyEmptyText}>
+                  {defaultAddress?.pincode ? `Around PIN ${defaultAddress.pincode}` : 'Add your address to see local listings'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {nearbyProperties.map((property) => (
+              <PropertyNearCard
+                key={property.id}
+                property={property}
+                onPress={() => navigation.navigate('RentalDetail', { rentalId: property.id })}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
             {QUICK_ACTIONS.map((action, idx) => (
@@ -597,6 +650,29 @@ function SearchSection({ title, items, emptyText, actionText, onAction, renderIt
       </View>
       {items.length ? items.map(renderItem) : <Text style={styles.searchEmpty}>{emptyText}</Text>}
     </View>
+  );
+}
+
+function PropertyNearCard({ property, onPress }) {
+  const imageUrl = property.frontImage ? getUploadUrl('properties', property.frontImage) : null;
+  const price = Number(property.price || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+  return (
+    <TouchableOpacity style={styles.propertyNearCard} activeOpacity={0.84} onPress={onPress}>
+      <View style={styles.propertyNearImageWrap}>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.propertyNearImage} resizeMode="cover" />
+        ) : (
+          <Text style={styles.propertyNearInitial}>P</Text>
+        )}
+        <View style={styles.propertyNearMode}>
+          <Text style={styles.propertyNearModeText}>{property.mode === 'RENT' ? 'Rent' : 'Sale'}</Text>
+        </View>
+      </View>
+      <Text style={styles.propertyNearTitle} numberOfLines={2}>{property.title}</Text>
+      <Text style={styles.propertyNearAddress} numberOfLines={1}>{property.address}</Text>
+      <Text style={styles.propertyNearPrice}>Rs {price}{property.mode === 'RENT' ? '/mo' : ''}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -970,6 +1046,94 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     lineHeight: 24,
+  },
+
+  /* Nearby properties */
+  propertyNearCard: {
+    width: 168,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    padding: 12,
+    marginRight: 12,
+    ...Shadow.sm,
+  },
+  propertyNearImageWrap: {
+    height: 90,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.secondaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  propertyNearImage: {
+    width: '100%',
+    height: '100%',
+  },
+  propertyNearInitial: {
+    color: Colors.secondary,
+    fontSize: 34,
+    fontWeight: '900',
+  },
+  propertyNearMode: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  propertyNearModeText: {
+    color: Colors.white,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  propertyNearTitle: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.sm,
+    fontWeight: '800',
+    minHeight: 36,
+  },
+  propertyNearAddress: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  propertyNearPrice: {
+    color: Colors.secondary,
+    fontSize: FontSize.md,
+    fontWeight: '900',
+    marginTop: 9,
+  },
+  nearbyLoading: {
+    width: 168,
+    minHeight: 185,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nearbyEmptyCard: {
+    width: 230,
+    minHeight: 122,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    padding: 14,
+    justifyContent: 'center',
+    ...Shadow.sm,
+  },
+  nearbyEmptyTitle: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+  nearbyEmptyText: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    lineHeight: 17,
+    marginTop: 6,
   },
 
   /* Quick actions */

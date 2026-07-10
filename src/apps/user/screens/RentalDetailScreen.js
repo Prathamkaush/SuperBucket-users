@@ -15,12 +15,17 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import { MapPin, Navigation } from 'lucide-react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { getPropertyDetail, submitInquiry } from '../services/properties';
 import { getUploadUrl } from '../services/api';
 
 const PHOTO_WIDTH = Dimensions.get('window').width - (Spacing.lg * 2);
+const ENABLE_NATIVE_MAPS =
+  process.env.EXPO_PUBLIC_ENABLE_NATIVE_MAPS === 'true' &&
+  Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY);
+const NativeMaps = getNativeMaps();
 
 export default function RentalDetailScreen({ route, navigation }) {
   const { rentalId } = route.params || {};
@@ -70,6 +75,12 @@ export default function RentalDetailScreen({ route, navigation }) {
   const formattedPrice = parseFloat(property.price).toLocaleString('en-IN');
   const unavailable = ['SOLD', 'RENTED'].includes(property.status);
   const availabilityLabel = property.status === 'SOLD' ? 'Sold' : property.status === 'RENTED' ? 'Rented' : 'Available';
+  const propertyPoint = coordinateFrom(property);
+  const mapRegion = buildRegion(propertyPoint);
+  const mapQuery = propertyPoint
+    ? `${propertyPoint.latitude},${propertyPoint.longitude}`
+    : [property.address, property.pincode].filter(Boolean).join(', ');
+  const canShowNativeMap = Boolean(NativeMaps && mapRegion);
 
   const handleCall = () => {
     if (unavailable) {
@@ -129,6 +140,17 @@ export default function RentalDetailScreen({ route, navigation }) {
         }
       }
     );
+  };
+
+  const handleOpenMap = () => {
+    if (!mapQuery) {
+      Alert.alert('Location unavailable', 'Property location is not listed.');
+      return;
+    }
+    const encodedQuery = encodeURIComponent(mapQuery);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodedQuery}`).catch(() => {
+      Alert.alert('Error', 'Could not open Google Maps');
+    });
   };
 
   return (
@@ -213,6 +235,34 @@ export default function RentalDetailScreen({ route, navigation }) {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitleNoMargin}>Location</Text>
+            <TouchableOpacity style={styles.mapAction} onPress={handleOpenMap}>
+              <Navigation size={15} color={Colors.white} strokeWidth={2.8} />
+              <Text style={styles.mapActionText}>Open Maps</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.locationMap}>
+            {canShowNativeMap ? (
+              <NativeMaps.MapView style={styles.map} region={mapRegion} scrollEnabled={false} zoomEnabled={false}>
+                <NativeMaps.Marker coordinate={propertyPoint} title={property.title} description={property.address} pinColor={Colors.secondary} />
+              </NativeMaps.MapView>
+            ) : (
+              <TouchableOpacity style={styles.mapFallback} onPress={handleOpenMap} activeOpacity={0.85}>
+                <View style={styles.mapGridLineHorizontal} />
+                <View style={[styles.mapGridLineHorizontal, styles.mapGridLineHorizontalTwo]} />
+                <View style={styles.mapGridLineVertical} />
+                <View style={[styles.mapGridLineVertical, styles.mapGridLineVerticalTwo]} />
+                <View style={styles.mapPinBadge}>
+                  <MapPin size={30} color={Colors.secondary} strokeWidth={2.6} />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.mapAddress} numberOfLines={2}>{property.address}</Text>
+        </View>
+
         {property.details && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Owner Notes</Text>
@@ -257,6 +307,36 @@ export default function RentalDetailScreen({ route, navigation }) {
     </KeyboardAvoidingView>
   );
 
+}
+
+function getNativeMaps() {
+  if (!ENABLE_NATIVE_MAPS || Platform.OS === 'web') return null;
+  try {
+    const maps = require('react-native-maps');
+    return {
+      MapView: maps.default,
+      Marker: maps.Marker,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function coordinateFrom(value) {
+  const latitude = Number(value?.latitude ?? value?.lat);
+  const longitude = Number(value?.longitude ?? value?.lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
+function buildRegion(point) {
+  if (!point) return null;
+  return {
+    latitude: point.latitude,
+    longitude: point.longitude,
+    latitudeDelta: 0.015,
+    longitudeDelta: 0.015,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -353,6 +433,14 @@ const styles = StyleSheet.create({
     ...Shadow.sm,
   },
   sectionTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900', marginBottom: 12 },
+  sectionTitleNoMargin: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
   factRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -363,6 +451,65 @@ const styles = StyleSheet.create({
   factLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700' },
   factValue: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
   notes: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 21, fontWeight: '600' },
+  locationMap: {
+    height: 190,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.secondaryLight,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  map: { flex: 1 },
+  mapFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.secondaryLight,
+  },
+  mapGridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '34%',
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  mapGridLineHorizontalTwo: { top: '66%' },
+  mapGridLineVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '32%',
+    width: 1,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  mapGridLineVerticalTwo: { left: '68%' },
+  mapPinBadge: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.sm,
+  },
+  mapAddress: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginTop: 10,
+  },
+  mapAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  mapActionText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   unavailableCard: {
     backgroundColor: Colors.dangerLight,
     borderRadius: Radius.lg,

@@ -150,12 +150,13 @@ export default function SpaceDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {['LIVE', 'SOLD', 'RENTED'].includes(currentStatus) ? (
+        {currentStatus !== 'REVIEW' ? (
           <View style={styles.statusCard}>
             <Text style={styles.cardTitle}>Listing status</Text>
-            <Text style={styles.cardCopy}>Mark this property unavailable once it is sold or rented. Buyers can still see it, but cannot send new leads.</Text>
+            <Text style={styles.cardCopy}>Use Draft to take the listing off the public property list. Mark it sold or rented once the deal is closed.</Text>
             <View style={styles.statusActions}>
               {[
+                { label: 'Draft', value: 'DRAFT' },
                 { label: 'Available', value: 'LIVE' },
                 { label: 'Sold', value: 'SOLD' },
                 { label: 'Rented', value: 'RENTED' },
@@ -173,7 +174,12 @@ export default function SpaceDetailScreen({ route, navigation }) {
               ))}
             </View>
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.statusCard}>
+            <Text style={styles.cardTitle}>Under admin review</Text>
+            <Text style={styles.cardCopy}>This listing is locked until admin approves or rejects it.</Text>
+          </View>
+        )}
 
         <View style={styles.grid}>
           <View style={styles.infoBox}>
@@ -442,10 +448,11 @@ const styles = StyleSheet.create({
   },
   statusActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
   statusAction: {
-    flex: 1,
+    width: '48%',
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.border,

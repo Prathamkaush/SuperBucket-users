@@ -6,7 +6,7 @@ import SpaceCard from '../components/SpaceCard';
 import { getMyProperties, normalizeSpace } from '../services/properties';
 import { Colors, FontSize, Radius, Spacing } from '../theme/theme';
 
-const FILTERS = ['All', 'Rent', 'Sell', 'Live', 'Review', 'Draft'];
+const FILTERS = ['All', 'Rent', 'Sell', 'Live', 'Review', 'Rejected'];
 
 export default function RenterListingsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -35,8 +35,7 @@ export default function RenterListingsScreen({ navigation }) {
     const filter = activeFilter.toUpperCase();
     return (
       space.mode === filter ||
-      space.status === filter ||
-      (filter === 'DRAFT' && space.status === 'REJECTED')
+      space.status === filter
     );
   });
 

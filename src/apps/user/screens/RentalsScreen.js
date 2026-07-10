@@ -33,6 +33,8 @@ function propertyAvailabilityLabel(property) {
 
 export default function RentalsScreen({ navigation, route }) {
   const searchTerm = String(route.params?.search || '').trim();
+  const nearbyOnly = Boolean(route.params?.nearbyOnly);
+  const routePincode = String(route.params?.pincode || '').trim();
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
@@ -41,29 +43,54 @@ export default function RentalsScreen({ navigation, route }) {
 
   const loadProperties = useCallback(async () => {
     try {
-      const response = await getLiveProperties(searchTerm ? { search: searchTerm } : {});
-      setProperties(response.properties || []);
-
+      setLoading(true);
+      let nearbyPincode = /^\d{6}$/.test(routePincode) ? routePincode : '';
       try {
-        const addresses = await getAddresses();
-        const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0];
-        if (defaultAddress?.pincode) {
-          setUserPincode(defaultAddress.pincode);
-          const nearbyResponse = await getLiveProperties({
-            pincode: defaultAddress.pincode,
-            limit: 20,
-          });
-          setNearbyProperties(nearbyResponse.properties || []);
+        if (!nearbyPincode) {
+          const addresses = await getAddresses();
+          const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0];
+          nearbyPincode = defaultAddress?.pincode || '';
+        }
+
+        if (/^\d{6}$/.test(nearbyPincode)) {
+          setUserPincode(nearbyPincode);
         }
       } catch (addressError) {
-        console.log('Could not load nearby properties:', addressError);
+        console.log('Could not load user address for nearby properties:', addressError);
+      }
+
+      const baseParams = searchTerm ? { search: searchTerm } : {};
+      if (nearbyOnly) {
+        if (/^\d{6}$/.test(nearbyPincode)) {
+          const nearbyResponse = await getLiveProperties({
+            ...baseParams,
+            pincode: nearbyPincode,
+            limit: 50,
+          });
+          setProperties(nearbyResponse.properties || []);
+        } else {
+          setProperties([]);
+        }
+        setNearbyProperties([]);
+        return;
+      }
+
+      const response = await getLiveProperties(baseParams);
+      setProperties(response.properties || []);
+
+      if (/^\d{6}$/.test(nearbyPincode)) {
+        const nearbyResponse = await getLiveProperties({
+          pincode: nearbyPincode,
+          limit: 20,
+        });
+        setNearbyProperties(nearbyResponse.properties || []);
       }
     } catch (error) {
       console.log('Error loading properties:', error);
     } finally {
       setLoading(false);
     }
-  }, [searchTerm]);
+  }, [nearbyOnly, routePincode, searchTerm]);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,7 +116,13 @@ export default function RentalsScreen({ navigation, route }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Rentals & Sales</Text>
           <Text style={styles.headerSub}>
-            {searchTerm ? `Search results for "${searchTerm}"` : 'Find your perfect property in town'}
+            {nearbyOnly
+              ? userPincode
+                ? `Properties near PIN ${userPincode}`
+                : 'Add an address to see nearby properties'
+              : searchTerm
+                ? `Search results for "${searchTerm}"`
+                : 'Find your perfect property in town'}
           </Text>
         </View>
       </View>
@@ -124,7 +157,7 @@ export default function RentalsScreen({ navigation, route }) {
           contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 50, gap: 16 }}
           showsVerticalScrollIndicator={false}
         >
-          {nearbyProperties.length > 0 && (
+          {!nearbyOnly && nearbyProperties.length > 0 && (
             <View style={styles.sponsoredSection}>
               <Text style={styles.sponsoredSectionTitle}>Properties Near Me</Text>
               <Text style={styles.nearbyHint}>Around PIN {userPincode}</Text>
@@ -315,7 +348,9 @@ export default function RentalsScreen({ navigation, route }) {
             })
           ) : (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No properties found under this category.</Text>
+              <Text style={styles.emptyText}>
+                {nearbyOnly ? 'No properties found near your saved address.' : 'No properties found under this category.'}
+              </Text>
             </View>
           )}
         </ScrollView>
