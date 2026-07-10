@@ -33,6 +33,14 @@ export function cancelServiceBooking(id, reason) {
   });
 }
 
+export function acceptServiceRevisit(id, scheduledAt) {
+  return authenticatedRequest(`/services/bookings/${id}/revisit/accept`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scheduledAt }),
+  });
+}
+
 export function reviewServiceBooking(id, rating, review) {
   return authenticatedRequest(`/services/bookings/${id}/review`, {
     method: 'POST',

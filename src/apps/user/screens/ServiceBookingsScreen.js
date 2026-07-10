@@ -1,15 +1,20 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, RefreshControl, ScrollView, StatusBar, StyleSheet,
+  ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BackButton from '../components/BackButton';
-import { cancelServiceBooking, getMyServiceBookings, reviewServiceBooking } from '../services/serviceMarketplace';
+import {
+  acceptServiceRevisit,
+  cancelServiceBooking,
+  getMyServiceBookings,
+  reviewServiceBooking,
+} from '../services/serviceMarketplace';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 
-const ACTIVE = ['PENDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS'];
-const STEPS = ['PENDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED'];
+const ACTIVE = ['PENDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'REVISIT_REQUESTED'];
+const STEPS = ['PENDING', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'REVISIT_REQUESTED', 'COMPLETED'];
 
 export default function ServiceBookingsScreen({ navigation }) {
   const [bookings, setBookings] = useState([]);
@@ -18,6 +23,8 @@ export default function ServiceBookingsScreen({ navigation }) {
   const [ratings, setRatings] = useState({});
   const [reviews, setReviews] = useState({});
   const [submittingId, setSubmittingId] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   const load = useCallback(async () => {
     try { setBookings(await getMyServiceBookings()); }
@@ -27,13 +34,31 @@ export default function ServiceBookingsScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const cancel = (id) => Alert.alert('Cancel booking?', 'A provider may already be preparing for this job.', [
-    { text: 'Keep booking' },
-    { text: 'Cancel booking', style: 'destructive', onPress: async () => {
-      try { await cancelServiceBooking(id, 'Cancelled by customer'); load(); }
-      catch (error) { Alert.alert('Could not cancel', error.message); }
-    } },
-  ]);
+  const requestCancel = (booking) => {
+    setCancelTarget(booking);
+    setCancelReason('');
+  };
+
+  const submitCancel = async () => {
+    if (!cancelTarget) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      Alert.alert('Reason required', 'Please tell us why you are cancelling this service.');
+      return;
+    }
+
+    try {
+      setSubmittingId(cancelTarget.id);
+      await cancelServiceBooking(cancelTarget.id, reason);
+      setCancelTarget(null);
+      setCancelReason('');
+      await load();
+    } catch (error) {
+      Alert.alert('Could not cancel', error.message);
+    } finally {
+      setSubmittingId(null);
+    }
+  };
 
   const submitReview = async (booking) => {
     const rating = ratings[booking.id];
@@ -44,6 +69,31 @@ export default function ServiceBookingsScreen({ navigation }) {
       await load();
     } catch (error) { Alert.alert('Could not submit review', error.message); }
     finally { setSubmittingId(null); }
+  };
+
+  const acceptRevisit = (booking) => {
+    const scheduledAt = getSameTimeTomorrow(booking.scheduledAt);
+    Alert.alert(
+      'Accept revisit?',
+      `The provider will revisit on ${scheduledAt.toLocaleString()}.`,
+      [
+        { text: 'Not now' },
+        {
+          text: 'Accept revisit',
+          onPress: async () => {
+            try {
+              setSubmittingId(booking.id);
+              await acceptServiceRevisit(booking.id, scheduledAt.toISOString());
+              await load();
+            } catch (error) {
+              Alert.alert('Could not accept revisit', error.message);
+            } finally {
+              setSubmittingId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -76,7 +126,17 @@ export default function ServiceBookingsScreen({ navigation }) {
                 ) : null}
 
                 {['ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS'].includes(item.status) ? <View style={styles.otp}><Text style={styles.otpLabel}>Completion OTP</Text><Text style={styles.otpValue}>{item.completionOtp}</Text><Text style={styles.otpHelp}>Share only after the work is finished.</Text></View> : null}
-                {['PENDING', 'ACCEPTED'].includes(item.status) ? <TouchableOpacity style={styles.cancel} onPress={() => cancel(item.id)}><Text style={styles.cancelText}>Cancel booking</Text></TouchableOpacity> : null}
+                {item.status === 'REVISIT_REQUESTED' ? (
+                  <View style={styles.revisitBox}>
+                    <Text style={styles.revisitTitle}>Revisit requested</Text>
+                    <Text style={styles.revisitText}>{item.revisitReason || 'Provider reached your address but could not complete the service because you were unavailable.'}</Text>
+                    <TouchableOpacity style={styles.revisitButton} disabled={submittingId === item.id} onPress={() => acceptRevisit(item)}>
+                      {submittingId === item.id ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.revisitButtonText}>Accept revisit tomorrow</Text>}
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                {item.status === 'CANCELLED' && item.cancellationReason ? <View style={styles.cancelReasonBox}><Text style={styles.cancelReasonTitle}>Cancellation reason</Text><Text style={styles.cancelReasonText}>{item.cancellationReason}</Text></View> : null}
+                {['PENDING', 'ACCEPTED'].includes(item.status) ? <TouchableOpacity style={styles.cancel} onPress={() => requestCancel(item)}><Text style={styles.cancelText}>Cancel booking</Text></TouchableOpacity> : null}
 
                 {item.status === 'COMPLETED' && !item.rating ? (
                   <View style={styles.reviewBox}>
@@ -93,8 +153,42 @@ export default function ServiceBookingsScreen({ navigation }) {
           {!bookings.length ? <View style={styles.empty}><Text style={styles.emptyTitle}>No service bookings yet</Text><TouchableOpacity onPress={() => navigation.navigate('PennyWorks')}><Text style={styles.link}>Browse services</Text></TouchableOpacity></View> : null}
         </ScrollView>
       )}
+      <Modal visible={Boolean(cancelTarget)} transparent animationType="fade" onRequestClose={() => setCancelTarget(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Cancel service?</Text>
+            <Text style={styles.modalText}>Please add a reason. The provider and admin will be able to see it.</Text>
+            <TextInput
+              style={styles.cancelInput}
+              multiline
+              textAlignVertical="top"
+              placeholder="Example: I am not available at this time"
+              placeholderTextColor={Colors.textMuted}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalSecondary} onPress={() => setCancelTarget(null)}>
+                <Text style={styles.modalSecondaryText}>Keep booking</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalDanger} disabled={submittingId === cancelTarget?.id} onPress={submitCancel}>
+                {submittingId === cancelTarget?.id ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.modalDangerText}>Cancel service</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
+}
+
+function getSameTimeTomorrow(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime()) || date.getTime() < Date.now()) {
+    date.setTime(Date.now());
+  }
+  date.setDate(date.getDate() + 1);
+  return date;
 }
 
 const styles = StyleSheet.create({
@@ -104,6 +198,9 @@ const styles = StyleSheet.create({
   price: { color: Colors.primary, fontWeight: '900', fontSize: FontSize.lg, marginTop: 12 }, finding: { color: Colors.warning, fontWeight: '700', fontSize: FontSize.xs, marginTop: 12 },
   providerCard: { backgroundColor: Colors.secondaryLight, borderRadius: Radius.md, padding: 12, flexDirection: 'row', gap: 10, marginTop: 14 }, avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: Colors.white, fontWeight: '900', fontSize: FontSize.lg }, providerCopy: { flex: 1 }, providerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }, providerName: { fontWeight: '900', color: Colors.textPrimary }, verified: { color: Colors.success, fontSize: 9, fontWeight: '900' }, providerMeta: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4 },
   otp: { backgroundColor: Colors.warningLight, borderRadius: Radius.md, padding: 12, marginTop: 14 }, otpLabel: { fontSize: FontSize.xs, fontWeight: '700' }, otpValue: { fontSize: 26, letterSpacing: 8, fontWeight: '900', color: Colors.textPrimary, marginTop: 3 }, otpHelp: { color: Colors.textSecondary, fontSize: FontSize.xs }, cancel: { borderTopWidth: 1, borderTopColor: Colors.border, marginTop: 14, paddingTop: 12 }, cancelText: { color: Colors.danger, textAlign: 'center', fontWeight: '800' },
+  cancelReasonBox: { backgroundColor: Colors.gray50, borderRadius: Radius.md, padding: 12, marginTop: 14, borderWidth: 1, borderColor: Colors.border }, cancelReasonTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' }, cancelReasonText: { color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 18, marginTop: 5 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: Spacing.lg }, modalCard: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: Spacing.lg, ...Shadow.md }, modalTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' }, modalText: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 20, marginTop: 6 }, cancelInput: { minHeight: 96, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, marginTop: 14, color: Colors.textPrimary }, modalActions: { flexDirection: 'row', gap: 10, marginTop: 14 }, modalSecondary: { flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, alignItems: 'center' }, modalSecondaryText: { color: Colors.textSecondary, fontWeight: '900' }, modalDanger: { flex: 1, backgroundColor: Colors.danger, borderRadius: Radius.md, padding: 12, alignItems: 'center' }, modalDangerText: { color: Colors.white, fontWeight: '900' },
+  revisitBox: { backgroundColor: Colors.warningLight, borderRadius: Radius.md, padding: 12, marginTop: 14, borderWidth: 1, borderColor: Colors.warning }, revisitTitle: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' }, revisitText: { color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 18, marginTop: 6 }, revisitButton: { backgroundColor: Colors.warning, borderRadius: Radius.md, padding: 12, alignItems: 'center', marginTop: 12 }, revisitButtonText: { color: Colors.white, fontWeight: '900' },
   reviewBox: { borderTopWidth: 1, borderTopColor: Colors.border, marginTop: 15, paddingTop: 15 }, reviewTitle: { fontWeight: '900', fontSize: FontSize.md }, stars: { flexDirection: 'row', gap: 6, marginVertical: 10 }, star: { fontSize: 30, color: Colors.gray300 }, starActive: { color: Colors.warning }, reviewInput: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 11, minHeight: 70, textAlignVertical: 'top' }, reviewButton: { backgroundColor: Colors.primary, borderRadius: Radius.md, padding: 12, alignItems: 'center', marginTop: 10 }, reviewButtonText: { color: Colors.white, fontWeight: '900' }, submittedReview: { backgroundColor: Colors.warningLight, borderRadius: Radius.md, padding: 12, marginTop: 14 }, submittedTitle: { color: Colors.warning, fontSize: FontSize.lg, fontWeight: '900' }, submittedText: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 4 },
   empty: { alignItems: 'center', padding: 40 }, emptyTitle: { fontWeight: '800', color: Colors.textSecondary }, link: { color: Colors.primary, fontWeight: '800', marginTop: 10 },
 });

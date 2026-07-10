@@ -1,27 +1,52 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BackButton from '../components/BackButton';
 import { getMyOrders, reorderOrder } from '../services/orders';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
+const PAGE_SIZE = 5;
 
 export default function OrdersScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalOrders, setTotalOrders] = useState(0);
   const [reorderingId, setReorderingId] = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (nextPage = 1, append = false, refreshOnly = false) => {
+    if (append) setLoadingMore(true);
+    else if (!refreshOnly) setLoading(true);
+
     try {
-      const data = await getMyOrders();
-      setOrders(data.orders || []);
+      const data = await getMyOrders(nextPage, PAGE_SIZE);
+      const nextOrders = data.orders || [];
+      setOrders((current) => (append ? mergeOrders(current, nextOrders) : nextOrders));
+      setPage(Number(data.page || nextPage));
+      setTotalOrders(Number(data.total || nextOrders.length));
+      setHasMore(Number(data.page || nextPage) < Number(data.pages || 1));
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
     }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const refresh = () => {
+    setRefreshing(true);
+    load(1, false, true);
+  };
+
+  const loadMore = () => {
+    if (loading || refreshing || loadingMore || !hasMore) return;
+    load(page + 1, true);
+  };
 
   const handleReorder = async (order) => {
     try {
@@ -42,20 +67,32 @@ export default function OrdersScreen({ navigation }) {
         <BackButton onPress={() => navigation.goBack()} />
         <View>
           <Text style={styles.title}>Your Orders</Text>
-          <Text style={styles.sub}>{orders.length} recent orders</Text>
+          <Text style={styles.sub}>{totalOrders || orders.length} orders</Text>
         </View>
       </View>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={orders}
+          keyExtractor={(order) => String(order.id)}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
-        >
-          {orders.map((order) => (
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.45}
+          ListEmptyComponent={<Text style={styles.empty}>No orders yet.</Text>}
+          ListFooterComponent={(
+            <View style={styles.footer}>
+              {loadingMore ? (
+                <ActivityIndicator color={Colors.primary} />
+              ) : !hasMore && orders.length ? (
+                <Text style={styles.footerText}>You have reached the end</Text>
+              ) : null}
+            </View>
+          )}
+          renderItem={({ item: order }) => (
             <TouchableOpacity
-              key={order.id}
               style={styles.card}
               activeOpacity={0.86}
               onPress={() => navigation.navigate('OrderTracking', { orderId: order.id, order })}
@@ -90,12 +127,16 @@ export default function OrdersScreen({ navigation }) {
                 </TouchableOpacity>
               ) : null}
             </TouchableOpacity>
-          ))}
-          {!orders.length ? <Text style={styles.empty}>No orders yet.</Text> : null}
-        </ScrollView>
+          )}
+        />
       )}
     </View>
   );
+}
+
+function mergeOrders(current, incoming) {
+  const seen = new Set(current.map((order) => order.id));
+  return [...current, ...incoming.filter((order) => !seen.has(order.id))];
 }
 
 function statusStyle(status) {
@@ -134,4 +175,6 @@ const styles = StyleSheet.create({
   reorderButtonDisabled: { opacity: 0.65 },
   reorderButtonText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
   empty: { color: Colors.textMuted, textAlign: 'center', marginTop: 60 },
+  footer: { minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  footerText: { color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '700' },
 });

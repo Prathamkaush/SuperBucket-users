@@ -15,6 +15,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import { submitBusinessAd } from '../services/homeOffers';
 
 export default function AdvertiseBusinessScreen({ navigation }) {
   const [posterUrl, setPosterUrl] = useState('');
@@ -24,18 +25,40 @@ export default function AdvertiseBusinessScreen({ navigation }) {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [offer, setOffer] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const submitAd = () => {
+  const submitAd = async () => {
     if (!businessName.trim() || !description.trim() || !address.trim() || !phone.trim()) {
       Alert.alert('Missing details', 'Please add business name, details, address, and phone number.');
       return;
     }
+    if (phone.length !== 10) {
+      Alert.alert('Invalid phone number', 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
 
-    Alert.alert(
-      'Ad request saved',
-      'Your business ad details are ready for review. We can connect this to the backend approval flow next.',
-      [{ text: 'Done', onPress: () => navigation.goBack() }],
-    );
+    try {
+      setSubmitting(true);
+      await submitBusinessAd({
+        businessName: businessName.trim(),
+        category: category.trim() || undefined,
+        description: description.trim(),
+        address: address.trim(),
+        phone: phone.trim(),
+        offer: offer.trim() || undefined,
+        posterUrl: posterUrl.trim() || undefined,
+      });
+
+      Alert.alert(
+        'Ad submitted',
+        'Your business ad is now visible in the Home offers section.',
+        [{ text: 'Done', onPress: () => navigation.goBack() }],
+      );
+    } catch (error) {
+      Alert.alert('Could not submit ad', error?.message || 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -153,9 +176,14 @@ export default function AdvertiseBusinessScreen({ navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.submitButton} activeOpacity={0.86} onPress={submitAd}>
+        <TouchableOpacity
+          style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+          activeOpacity={0.86}
+          onPress={submitAd}
+          disabled={submitting}
+        >
           <Feather name="send" size={18} color={Colors.white} />
-          <Text style={styles.submitText}>SUBMIT AD REQUEST</Text>
+          <Text style={styles.submitText}>{submitting ? 'SUBMITTING...' : 'SUBMIT AD REQUEST'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -229,5 +257,6 @@ const styles = StyleSheet.create({
     gap: 9,
     ...Shadow.redGlow,
   },
+  submitButtonDisabled: { opacity: 0.65 },
   submitText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900', letterSpacing: 0.8 },
 });

@@ -346,6 +346,20 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           ) : null}
         </View>
+        <TouchableOpacity
+          style={styles.heroAdvertiseButton}
+          activeOpacity={0.86}
+          onPress={() => navigation.navigate('AdvertiseBusiness')}
+        >
+          <View style={styles.heroAdvertiseIcon}>
+            <MaterialCommunityIcons name="bullhorn" size={18} color={Colors.primary} />
+          </View>
+          <View style={styles.heroAdvertiseCopy}>
+            <Text style={styles.heroAdvertiseTitle}>Advertise your business</Text>
+            <Text style={styles.heroAdvertiseSub}>Show your offer on the Home screen</Text>
+          </View>
+          <Feather name="arrow-right" size={18} color={Colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {searchResults || searching || searchError ? (
@@ -444,7 +458,13 @@ export default function HomeScreen({ navigation }) {
                 style={[styles.offerCard, { backgroundColor: offer.color || Colors.primary }]}
                 activeOpacity={0.88}
               >
-                <View style={styles.offerIconBadge}>
+                {offer.imageUrl ? (
+                  <>
+                    <Image source={{ uri: offer.imageUrl }} style={styles.offerImage} resizeMode="cover" />
+                    <View style={styles.offerImageOverlay} />
+                  </>
+                ) : null}
+                <View style={[styles.offerIconBadge, offer.imageUrl && styles.offerIconBadgeOnImage]}>
                   <Text style={styles.offerIconText}>{iconForOffer(offer.icon)}</Text>
                 </View>
                 <Text style={styles.offerTitle}>{offer.title}</Text>
@@ -843,6 +863,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchClearText: { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '900' },
+  heroAdvertiseButton: {
+    marginTop: 12,
+    minHeight: 58,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: '#F3B9BE',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    ...Shadow.sm,
+  },
+  heroAdvertiseIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroAdvertiseCopy: { flex: 1 },
+  heroAdvertiseTitle: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.sm,
+    fontWeight: '900',
+  },
+  heroAdvertiseSub: {
+    color: Colors.textMuted,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   searchResultsPanel: {
     backgroundColor: Colors.white,
     marginHorizontal: Spacing.lg,
@@ -933,7 +987,17 @@ const styles = StyleSheet.create({
     marginRight: 12,
     minHeight: 130,
     justifyContent: 'space-between',
+    overflow: 'hidden',
     ...Shadow.md,
+  },
+  offerImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  offerImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.42)',
   },
   offerIconBadge: {
     width: 32,
@@ -945,6 +1009,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.35)',
+  },
+  offerIconBadgeOnImage: {
+    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   offerIconText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   offerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.white },

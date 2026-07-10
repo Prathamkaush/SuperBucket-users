@@ -1,6 +1,6 @@
 import { authenticatedRequest } from './auth';
 
-export function getMyOrders(page = 1, limit = 20) {
+export function getMyOrders(page = 1, limit = 5) {
   return authenticatedRequest(`/orders/my?page=${page}&limit=${limit}`);
 }
 
