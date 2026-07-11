@@ -1,6 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
+  ActivityIndicator, Alert, Dimensions, Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
@@ -17,6 +17,7 @@ import { getWallet } from '../services/wallet';
 import { getNotifications } from '../services/notifications';
 import { getSettings } from '../services/settings';
 import { getHomeOffers } from '../services/homeOffers';
+import { getMyOrders, reorderOrder } from '../services/orders';
 
 const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
@@ -41,9 +42,8 @@ const CATEGORIES = [
 
 const QUICK_ACTIONS = [
   { icon: 'bullhorn', iconSet: 'MaterialCommunityIcons', label: 'Advertise Business', screen: 'AdvertiseBusiness', color: Colors.primaryLight, iconColor: Colors.primary },
-  { icon: 'file-text', iconSet: 'Feather', label: 'Print & Deliver', screen: 'PrintDeliver', color: Colors.secondaryLight, iconColor: Colors.secondary },
+  { icon: 'repeat', iconSet: 'Feather', label: 'Buy Again', action: 'reorder', color: '#FFF7E6', iconColor: '#B45309' },
   { icon: 'tool', iconSet: 'Feather', label: 'Penny Works', screen: 'PennyWorks', color: '#FFF3E6', iconColor: Colors.accent },
-  { icon: 'package', iconSet: 'Feather', label: 'Send Parcel', screen: 'Parcel', color: '#F0F4FF', iconColor: '#4F46E5' },
   { icon: 'home-city-outline', iconSet: 'MaterialCommunityIcons', label: 'Properties', screen: 'Rentals', color: '#E6FFFA', iconColor: Colors.success },
   { icon: 'home-plus-outline', iconSet: 'MaterialCommunityIcons', label: 'List Property', screen: 'RenterPortal', color: '#EEF2FF', iconColor: '#4F46E5' },
   { icon: 'briefcase', iconSet: 'Feather', label: 'Provide Services', screen: 'ProviderPortal', color: '#ECFDF5', iconColor: Colors.success },
@@ -160,6 +160,26 @@ export default function HomeScreen({ navigation }) {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [nextDeliverySlot, setNextDeliverySlot] = useState(() => getNextDeliverySlot(DEFAULT_SLOT_TIMES));
   const [homeOffers, setHomeOffers] = useState(FALLBACK_OFFERS);
+  const [reordering, setReordering] = useState(false);
+  const [activeAdIndex, setActiveAdIndex] = useState(0);
+  const [contentPhase, setContentPhase] = useState(0);
+  const adScrollRef = useRef(null);
+  const deferredRequestsRef = useRef(new Set());
+  const businessAds = useMemo(() => homeOffers.filter((offer) => offer.icon === 'business'), [homeOffers]);
+  const promotionalOffers = useMemo(() => homeOffers.filter((offer) => offer.icon !== 'business'), [homeOffers]);
+  const adCardWidth = Dimensions.get('window').width - (Spacing.lg * 2);
+
+  useEffect(() => {
+    if (businessAds.length < 2) return undefined;
+    const timer = setInterval(() => {
+      setActiveAdIndex((current) => {
+        const next = (current + 1) % businessAds.length;
+        adScrollRef.current?.scrollTo({ x: next * adCardWidth, animated: true });
+        return next;
+      });
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [adCardWidth, businessAds.length]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -209,11 +229,13 @@ export default function HomeScreen({ navigation }) {
     setWalletBalance(Number(wallet?.wallet?.balance || 0));
     setUnreadNotifications(Number(notifications?.unread || 0));
     setNextDeliverySlot(getNextDeliverySlot(settings?.deliverySlotTimes));
+  }, []);
 
+  const loadNearbyProperties = useCallback(async () => {
     try {
       setNearbyPropertiesLoading(true);
-      if (selectedAddress?.pincode) {
-        const nearbyResponse = await getLiveProperties({ pincode: selectedAddress.pincode, limit: 8 });
+      if (defaultAddress?.pincode) {
+        const nearbyResponse = await getLiveProperties({ pincode: defaultAddress.pincode, limit: 8 });
         setNearbyProperties(nearbyResponse.properties || []);
       } else {
         setNearbyProperties([]);
@@ -223,16 +245,32 @@ export default function HomeScreen({ navigation }) {
     } finally {
       setNearbyPropertiesLoading(false);
     }
-  }, []);
+  }, [defaultAddress?.pincode]);
 
   useFocusEffect(
     useCallback(() => {
-      loadCategories();
-      loadTrending();
       loadHomeOffers();
       loadHeaderData();
-    }, [loadCategories, loadTrending, loadHomeOffers, loadHeaderData]),
+    }, [loadHomeOffers, loadHeaderData]),
   );
+
+  useEffect(() => {
+    const requestOnce = (key, request) => {
+      if (deferredRequestsRef.current.has(key)) return;
+      deferredRequestsRef.current.add(key);
+      request();
+    };
+    if (contentPhase >= 1) requestOnce('trending', loadTrending);
+    if (contentPhase >= 2) requestOnce('nearby', loadNearbyProperties);
+    if (contentPhase >= 3) requestOnce('categories', loadCategories);
+  }, [contentPhase, loadCategories, loadNearbyProperties, loadTrending]);
+
+  const loadSectionsForScroll = (event) => {
+    const y = event.nativeEvent.contentOffset.y;
+    if (y > 850) setContentPhase((current) => Math.max(current, 3));
+    else if (y > 480) setContentPhase((current) => Math.max(current, 2));
+    else if (y > 120) setContentPhase((current) => Math.max(current, 1));
+  };
 
   const openTrending = (product) =>
     navigation.navigate('ProductDetail', { productId: product.id, product });
@@ -270,6 +308,36 @@ export default function HomeScreen({ navigation }) {
     setSearch('');
     setSearchError('');
     setSearchResults(null);
+  };
+
+  const buyAgain = async () => {
+    if (reordering) return;
+    try {
+      setReordering(true);
+      const response = await getMyOrders(1, 20);
+      const previousOrder = (response?.orders || []).find((order) =>
+        ['DELIVERED', 'CANCELLED'].includes(order.status),
+      );
+      if (!previousOrder) {
+        Alert.alert('No previous order', 'A completed order will appear here after your first delivery.');
+        return;
+      }
+      await reorderOrder(previousOrder.id);
+      Alert.alert(
+        'Added to cart',
+        `Items from order #${previousOrder.id} were added to your cart. Review them and pay at checkout.`,
+        [{ text: 'View cart', onPress: () => navigation.navigate('Cart') }],
+      );
+    } catch (error) {
+      Alert.alert('Could not add previous items', error?.message || 'Please try again');
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const runQuickAction = (action) => {
+    if (action.action === 'reorder') return buyAgain();
+    navigation.navigate(action.screen);
   };
   const locationLabel = formatAddressLabel(defaultAddress);
   const profileImageUrl = user?.profileImage ? getUploadUrl('profiles', user.profileImage) : null;
@@ -346,20 +414,6 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={styles.heroAdvertiseButton}
-          activeOpacity={0.86}
-          onPress={() => navigation.navigate('AdvertiseBusiness')}
-        >
-          <View style={styles.heroAdvertiseIcon}>
-            <MaterialCommunityIcons name="bullhorn" size={18} color={Colors.primary} />
-          </View>
-          <View style={styles.heroAdvertiseCopy}>
-            <Text style={styles.heroAdvertiseTitle}>Advertise your business</Text>
-            <Text style={styles.heroAdvertiseSub}>Show your offer on the Home screen</Text>
-          </View>
-          <Feather name="arrow-right" size={18} color={Colors.primary} />
-        </TouchableOpacity>
       </View>
 
       {searchResults || searching || searchError ? (
@@ -418,7 +472,7 @@ export default function HomeScreen({ navigation }) {
                 onAction={() => navigation.navigate('PennyWorks', { search: searchResults.term })}
                 items={searchResults.services}
                 renderItem={(service) => (
-                  <TouchableOpacity key={`service-${service.package.id}`} style={styles.searchResultRow} onPress={() => navigation.navigate('ServiceCheckout', { servicePackage: service.package, category: service.category })}>
+                  <TouchableOpacity key={`service-${service.package.id}`} style={styles.searchResultRow} onPress={() => navigation.navigate('ServiceDetail', { servicePackage: service.package, category: service.category })}>
                     <Text style={styles.searchResultType}>S</Text>
                     <View style={styles.searchResultCopy}>
                       <Text style={styles.searchResultTitle} numberOfLines={1}>{service.package.name}</Text>
@@ -432,7 +486,47 @@ export default function HomeScreen({ navigation }) {
         </View>
       ) : null}
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={loadSectionsForScroll}
+        scrollEventThrottle={120}
+      >
+        {businessAds.length ? (
+          <View style={styles.adHeroSection}>
+            <ScrollView
+              ref={adScrollRef}
+              horizontal
+              pagingEnabled
+              snapToInterval={adCardWidth}
+              decelerationRate="fast"
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(event) => setActiveAdIndex(
+                Math.round(event.nativeEvent.contentOffset.x / adCardWidth),
+              )}
+            >
+              {businessAds.map((ad) => (
+                <View key={ad.id} style={[styles.adHeroCard, { width: adCardWidth, backgroundColor: ad.color || '#0B63CE' }]}>
+                  {ad.imageUrl ? <Image source={{ uri: ad.imageUrl }} style={styles.adHeroImage} resizeMode="cover" /> : null}
+                  <View style={styles.adHeroOverlay} />
+                  <View style={styles.sponsoredBadge}><Text style={styles.sponsoredText}>Sponsored</Text></View>
+                  <View style={styles.adHeroCopy}>
+                    {ad.code ? <Text style={styles.adHeroCategory}>{ad.code}</Text> : null}
+                    <Text style={styles.adHeroTitle}>{ad.title}</Text>
+                    <Text style={styles.adHeroSubtitle}>{ad.subtitle}</Text>
+                    <View style={styles.adHeroAction}><Text style={styles.adHeroActionText}>{ad.buttonLabel || 'View offer'}</Text></View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            {businessAds.length > 1 ? (
+              <View style={styles.adDots}>
+                {businessAds.map((ad, index) => (
+                  <View key={`dot-${ad.id}`} style={[styles.adDot, index === activeAdIndex && styles.adDotActive]} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* ─── Delivery Slot Banner ─── */}
         <View style={styles.slotBanner}>
@@ -452,7 +546,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Offers for You 🎉</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {homeOffers.map((offer) => (
+            {promotionalOffers.map((offer) => (
               <TouchableOpacity
                 key={offer.id}
                 style={[styles.offerCard, { backgroundColor: offer.color || Colors.primary }]}
@@ -573,12 +667,13 @@ export default function HomeScreen({ navigation }) {
                 key={idx}
                 style={[styles.quickCard, { backgroundColor: action.color }]}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate(action.screen)}
+                disabled={action.action === 'reorder' && reordering}
+                onPress={() => runQuickAction(action)}
               >
                 <View style={styles.quickIcon}>
                   <ActionIcon action={action} />
                 </View>
-                <Text style={styles.quickLabel}>{action.label}</Text>
+                <Text style={styles.quickLabel}>{action.action === 'reorder' && reordering ? 'Adding...' : action.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -934,6 +1029,44 @@ const styles = StyleSheet.create({
   searchResultTitle: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800' },
   searchResultSub: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 2 },
   searchEmpty: { color: Colors.textMuted, fontSize: FontSize.xs, paddingVertical: 4 },
+
+  /* Sponsored hero carousel */
+  adHeroSection: { marginHorizontal: Spacing.lg, marginTop: 16, marginBottom: 4 },
+  adHeroCard: {
+    height: 235,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    ...Shadow.md,
+  },
+  adHeroImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  adHeroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
+  sponsoredBadge: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  sponsoredText: { color: Colors.white, fontSize: 10, fontWeight: '800' },
+  adHeroCopy: { padding: 18 },
+  adHeroCategory: { color: 'rgba(255,255,255,0.82)', fontSize: FontSize.xs, fontWeight: '800', textTransform: 'uppercase' },
+  adHeroTitle: { marginTop: 4, color: Colors.white, fontSize: FontSize.xxl, fontWeight: '900' },
+  adHeroSubtitle: { marginTop: 5, color: Colors.white, fontSize: FontSize.sm, lineHeight: 19 },
+  adHeroAction: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.white,
+  },
+  adHeroActionText: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '900' },
+  adDots: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 },
+  adDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.gray300 },
+  adDotActive: { width: 18, backgroundColor: Colors.primary },
 
   /* Slot banner */
   slotBanner: {

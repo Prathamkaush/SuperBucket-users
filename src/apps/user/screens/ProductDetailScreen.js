@@ -7,13 +7,16 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { addCartItem } from '../services/cart';
-import { getProduct } from '../services/products';
+import { getProduct, getProducts } from '../services/products';
+import { createProductReview, getProductReviews } from '../services/reviews';
 
 export default function ProductDetailScreen({ route, navigation }) {
   const productId = route.params?.productId || route.params?.product?.id;
@@ -29,6 +32,11 @@ export default function ProductDetailScreen({ route, navigation }) {
   const [selectedSizeId, setSelectedSizeId] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     if (!productId) {
@@ -39,7 +47,7 @@ export default function ProductDetailScreen({ route, navigation }) {
     let active = true;
     setLoading(true);
     getProduct(productId)
-      .then((response) => {
+      .then(async (response) => {
         if (!active) return;
         setProduct(response);
         const defaultVariant =
@@ -47,6 +55,15 @@ export default function ProductDetailScreen({ route, navigation }) {
           response.variants[0];
         setSelectedVariantId(defaultVariant?.id || null);
         setSelectedSizeId(response.sizes?.[0]?.id || null);
+        const [reviewData, relatedData] = await Promise.all([
+          getProductReviews(response.id).catch(() => ({ reviews: [] })),
+          response.categoryId
+            ? getProducts({ page: 1, limit: 8, categoryId: response.categoryId, stock: 'in' }).catch(() => ({ products: [] }))
+            : Promise.resolve({ products: [] }),
+        ]);
+        if (!active) return;
+        setReviews(reviewData.reviews || []);
+        setRelatedProducts((relatedData.products || []).filter((item) => item.id !== response.id).slice(0, 6));
       })
       .catch((loadError) => {
         if (active) setError(loadError?.message || 'Unable to load product');
@@ -69,6 +86,7 @@ export default function ProductDetailScreen({ route, navigation }) {
   const stock = selectedVariant?.stock ?? product?.stock ?? 0;
   const selectedSize = product?.sizes?.find((size) => size.id === selectedSizeId);
   const availableStock = selectedVariant?.stock ?? selectedSize?.stock ?? stock;
+  const discountPercent = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
   const images = product?.images?.length
     ? product.images
     : product?.imageUrl
@@ -91,6 +109,24 @@ export default function ProductDetailScreen({ route, navigation }) {
       Alert.alert('Could not add to cart', addError?.message || 'Please try again');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!reviewRating || submittingReview) {
+      if (!reviewRating) Alert.alert('Choose a rating', 'Select between 1 and 5 stars.');
+      return;
+    }
+    try {
+      setSubmittingReview(true);
+      await createProductReview(product.id, reviewRating, reviewComment);
+      setReviewRating(0);
+      setReviewComment('');
+      Alert.alert('Review submitted', 'Your review will appear after approval.');
+    } catch (reviewError) {
+      Alert.alert('Could not submit review', reviewError?.message || 'Please try again');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -124,8 +160,9 @@ export default function ProductDetailScreen({ route, navigation }) {
         <TouchableOpacity
           onPress={() => navigation.navigate('MainTabs', { screen: 'Cart' })}
           style={styles.cartButton}
+          accessibilityLabel="Open cart"
         >
-          <Text style={styles.cartButtonText}>Cart</Text>
+          <Feather name="shopping-bag" size={22} color={Colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -169,6 +206,12 @@ export default function ProductDetailScreen({ route, navigation }) {
         <View style={styles.card}>
           {product.brand ? <Text style={styles.brand}>{product.brand}</Text> : null}
           <Text style={styles.productName}>{product.name}</Text>
+          {product.reviewCount > 0 ? (
+            <View style={styles.productRatingRow}>
+              <Text style={styles.productRatingScore}>★ {product.averageRating.toFixed(1)}</Text>
+              <Text style={styles.productRatingCount}>{product.reviewCount} ratings</Text>
+            </View>
+          ) : null}
           {product.shortDescription ? (
             <Text style={styles.description}>{product.shortDescription}</Text>
           ) : null}
@@ -255,10 +298,14 @@ export default function ProductDetailScreen({ route, navigation }) {
 
           <View style={styles.priceRow}>
             <View>
-              <Text style={styles.price}>Rs {price.toLocaleString()}</Text>
+              <View style={styles.priceLine}>
+                <Text style={styles.price}>Rs {price.toLocaleString()}</Text>
+                {discountPercent ? <Text style={styles.discountPill}>{discountPercent}% OFF</Text> : null}
+              </View>
               {mrp > price && (
                 <Text style={styles.mrp}>MRP Rs {mrp.toLocaleString()}</Text>
               )}
+              <Text style={styles.taxCopy}>Inclusive of all taxes</Text>
               <Text style={[styles.stock, !stock && styles.outOfStock]}>
                 {availableStock ? `${availableStock} available` : 'Out of stock'}
               </Text>
@@ -281,6 +328,14 @@ export default function ProductDetailScreen({ route, navigation }) {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+
+        <View style={styles.trustStrip}>
+          <TrustItem icon="shield" label="Authentic" sub="Quality checked" />
+          <View style={styles.trustDivider} />
+          <TrustItem icon="truck" label="Fast delivery" sub="Tracked order" />
+          <View style={styles.trustDivider} />
+          <TrustItem icon="refresh-cw" label="Support" sub="Easy assistance" />
         </View>
 
         {product.description ? (
@@ -326,6 +381,65 @@ export default function ProductDetailScreen({ route, navigation }) {
               ))}
           </View>
         )}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Write a product review</Text>
+          <Text style={styles.reviewHelp}>Only customers who received this product can submit a review.</Text>
+          <View style={styles.reviewStars}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => setReviewRating(star)} accessibilityLabel={`${star} stars`}>
+                <Text style={[styles.reviewStar, star <= reviewRating && styles.reviewStarActive]}>★</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput
+            style={styles.reviewInput}
+            value={reviewComment}
+            onChangeText={setReviewComment}
+            placeholder="What did you like or dislike?"
+            placeholderTextColor={Colors.textMuted}
+            multiline
+            maxLength={500}
+            textAlignVertical="top"
+          />
+          <TouchableOpacity style={[styles.reviewSubmit, submittingReview && styles.addButtonDisabled]} disabled={submittingReview} onPress={submitReview}>
+            {submittingReview ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.reviewSubmitText}>Submit review</Text>}
+          </TouchableOpacity>
+        </View>
+
+        {reviews.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Customer reviews</Text>
+            {reviews.slice(0, 5).map((review) => (
+              <View key={review.id} style={styles.reviewItem}>
+                <View style={styles.reviewItemHeader}>
+                  <Text style={styles.reviewerName}>{review.user?.name || 'Verified customer'}</Text>
+                  <Text style={styles.reviewItemStars}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</Text>
+                </View>
+                {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
+                <Text style={styles.verifiedPurchase}>Verified purchase</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {relatedProducts.length > 0 ? (
+          <View style={styles.relatedSection}>
+            <Text style={styles.relatedTitle}>More products you may like</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.relatedRow}>
+              {relatedProducts.map((item) => (
+                <TouchableOpacity key={item.id} style={styles.relatedCard} activeOpacity={0.86} onPress={() => navigation.push('ProductDetail', { productId: item.id, product: item })}>
+                  <View style={styles.relatedImageBox}>
+                    {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.relatedImage} resizeMode="contain" /> : <Text style={styles.relatedFallback}>{item.name.charAt(0)}</Text>}
+                  </View>
+                  <Text style={styles.relatedName} numberOfLines={2}>{item.name}</Text>
+                  {item.reviewCount > 0 ? <Text style={styles.relatedRating}>★ {item.averageRating.toFixed(1)} ({item.reviewCount})</Text> : null}
+                  <Text style={styles.relatedPrice}>Rs {item.price.toLocaleString()}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.bottomBar}>
@@ -356,10 +470,20 @@ export default function ProductDetailScreen({ route, navigation }) {
   );
 }
 
+function TrustItem({ icon, label, sub }) {
+  return (
+    <View style={styles.trustItem}>
+      <View style={styles.trustIcon}><Feather name={icon} size={16} color="#111827" /></View>
+      <Text style={styles.trustLabel}>{label}</Text>
+      <Text style={styles.trustSub}>{sub}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1, backgroundColor: '#F5F5F2' },
   header: {
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: Colors.white,
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 48,
@@ -368,90 +492,129 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '800' },
+  headerTitle: { flex: 1, color: '#111827', fontSize: FontSize.md, fontWeight: '800', textAlign: 'center', letterSpacing: 0.2 },
   cartButton: {
+    width: 42,
+    height: 42,
     borderRadius: Radius.full,
     backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: '#F3B9BE',
-    paddingHorizontal: 13,
-    paddingVertical: 8,
+    borderColor: 'rgba(15,23,42,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cartButtonText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800' },
-  content: { padding: Spacing.lg, paddingBottom: 130 },
+  content: { padding: 14, paddingBottom: 145 },
   hero: {
-    height: 300,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.white,
+    height: 365,
+    borderRadius: 24,
+    backgroundColor: '#FAFAF8',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    ...Shadow.md,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
   },
-  mainImage: { width: '100%', height: '100%' },
+  mainImage: { width: '90%', height: '90%' },
   imageFallback: { color: Colors.secondary, fontSize: 80, fontWeight: '900' },
   categoryPill: {
     position: 'absolute',
     top: 14,
     right: 14,
     borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+    backgroundColor: 'rgba(17,24,39,0.90)',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   categoryText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '800' },
-  thumbnailRow: { gap: 10, paddingVertical: 12 },
+  thumbnailRow: { gap: 10, paddingVertical: 14, paddingHorizontal: 2 },
   thumbnail: {
     width: 66,
     height: 66,
-    borderRadius: Radius.sm,
-    borderWidth: 2,
-    borderColor: Colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.10)',
     backgroundColor: Colors.white,
     overflow: 'hidden',
   },
-  thumbnailActive: { borderColor: Colors.primary },
+  thumbnailActive: { borderColor: '#111827', borderWidth: 2 },
   thumbnailImage: { width: '100%', height: '100%' },
   card: {
     marginTop: Spacing.md,
-    borderRadius: Radius.lg,
+    borderRadius: 20,
     backgroundColor: Colors.white,
     padding: Spacing.lg,
-    ...Shadow.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
   },
-  brand: { color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '900', textTransform: 'uppercase' },
-  productName: { marginTop: 3, color: Colors.textPrimary, fontSize: FontSize.xxl, fontWeight: '900' },
-  description: { marginTop: 7, color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 20 },
+  brand: { color: Colors.textMuted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.3 },
+  productName: { marginTop: 7, color: '#111827', fontSize: 27, lineHeight: 33, fontWeight: '800', letterSpacing: -0.6 },
+  productRatingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  productRatingScore: { color: '#92400E', backgroundColor: '#FEF3C7', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4, fontSize: FontSize.xs, fontWeight: '900' },
+  productRatingCount: { color: Colors.textMuted, fontSize: FontSize.xs },
+  description: { marginTop: 11, color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 21 },
   variantSection: { marginTop: 20 },
   sectionLabel: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900', marginBottom: 10 },
   variantGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   variantOption: {
     minWidth: 92,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#FAFAF8',
   },
-  variantOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  variantOptionActive: { borderColor: '#111827', backgroundColor: '#111827' },
   variantName: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '900' },
-  variantNameActive: { color: Colors.primary },
+  variantNameActive: { color: Colors.white },
   variantPrice: { marginTop: 2, color: Colors.textMuted, fontSize: 10, fontWeight: '700' },
   attributeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   attributeChip: { borderRadius: Radius.sm, backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 7 },
   attributeName: { color: Colors.textMuted, fontSize: 9, fontWeight: '700' },
   attributeValue: { color: Colors.textPrimary, fontSize: FontSize.xs, fontWeight: '900' },
   priceRow: { marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  price: { color: Colors.primary, fontSize: FontSize.xxl, fontWeight: '900' },
+  priceLine: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  price: { color: '#111827', fontSize: 28, fontWeight: '900', letterSpacing: -0.7 },
+  discountPill: { color: '#047857', backgroundColor: '#D1FAE5', borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '900' },
   mrp: { color: Colors.textMuted, fontSize: FontSize.xs, textDecorationLine: 'line-through' },
+  taxCopy: { color: Colors.textMuted, fontSize: 10, marginTop: 4 },
   stock: { marginTop: 3, color: Colors.success, fontSize: FontSize.xs, fontWeight: '800' },
   outOfStock: { color: Colors.danger },
   quantityControl: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: Radius.md, backgroundColor: Colors.primaryLight, padding: 5 },
-  quantityButton: { width: 34, height: 34, borderRadius: Radius.sm, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  quantityButton: { width: 34, height: 34, borderRadius: Radius.sm, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' },
   quantityButtonText: { color: Colors.white, fontSize: FontSize.lg, fontWeight: '900' },
   quantity: { minWidth: 22, textAlign: 'center', color: Colors.primary, fontWeight: '900' },
   cardTitle: { marginBottom: 10, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
   bodyText: { color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 21 },
+  trustStrip: { marginTop: 14, flexDirection: 'row', alignItems: 'stretch', borderRadius: 18, backgroundColor: Colors.white, paddingVertical: 16, borderWidth: 1, borderColor: 'rgba(15,23,42,0.06)' },
+  trustItem: { flex: 1, alignItems: 'center', paddingHorizontal: 5 },
+  trustIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' },
+  trustLabel: { marginTop: 7, color: '#111827', fontSize: 10, fontWeight: '900', textAlign: 'center' },
+  trustSub: { marginTop: 2, color: Colors.textMuted, fontSize: 8, textAlign: 'center' },
+  trustDivider: { width: 1, backgroundColor: 'rgba(15,23,42,0.08)' },
+  reviewHelp: { color: Colors.textMuted, fontSize: FontSize.xs, lineHeight: 18 },
+  reviewStars: { flexDirection: 'row', gap: 8, marginVertical: 12 },
+  reviewStar: { color: Colors.gray300, fontSize: 34 },
+  reviewStarActive: { color: Colors.warning },
+  reviewInput: { minHeight: 90, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 12, color: Colors.textPrimary, backgroundColor: Colors.background },
+  reviewSubmit: { marginTop: 12, borderRadius: Radius.md, backgroundColor: Colors.primary, paddingVertical: 12, alignItems: 'center' },
+  reviewSubmitText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900' },
+  reviewItem: { paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.border },
+  reviewItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  reviewerName: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800' },
+  reviewItemStars: { color: Colors.warning, fontSize: FontSize.sm },
+  reviewComment: { marginTop: 7, color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 20 },
+  verifiedPurchase: { marginTop: 6, color: Colors.success, fontSize: 10, fontWeight: '800' },
+  relatedSection: { marginTop: Spacing.lg },
+  relatedTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900', marginBottom: 12 },
+  relatedRow: { gap: 12, paddingBottom: 4 },
+  relatedCard: { width: 166, padding: 0, paddingBottom: 13, borderRadius: 18, overflow: 'hidden', backgroundColor: Colors.white, borderWidth: 1, borderColor: 'rgba(15,23,42,0.06)', ...Shadow.sm },
+  relatedImageBox: { height: 132, backgroundColor: '#FAFAF8', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  relatedImage: { width: '88%', height: '88%' },
+  relatedFallback: { color: Colors.secondary, fontSize: 38, fontWeight: '900' },
+  relatedName: { minHeight: 40, marginTop: 11, marginHorizontal: 12, color: '#111827', fontSize: FontSize.sm, lineHeight: 19, fontWeight: '800' },
+  relatedRating: { marginTop: 4, marginHorizontal: 12, color: '#92400E', fontSize: 10, fontWeight: '800' },
+  relatedPrice: { marginTop: 8, marginHorizontal: 12, color: '#111827', fontSize: FontSize.md, fontWeight: '900' },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 20, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.divider },
   infoLabel: { flex: 1, color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '700' },
   infoValue: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '800', textAlign: 'right' },
@@ -462,9 +625,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255,255,255,0.98)',
     paddingHorizontal: Spacing.lg,
-    paddingTop: 12,
+    paddingTop: 13,
     paddingBottom: 24,
     flexDirection: 'row',
     alignItems: 'center',
@@ -472,7 +635,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '700' },
   totalPrice: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '900' },
-  addButton: { borderRadius: Radius.md, backgroundColor: Colors.primary, paddingHorizontal: 28, paddingVertical: 14 },
+  addButton: { minWidth: 175, borderRadius: 14, backgroundColor: '#111827', paddingHorizontal: 28, paddingVertical: 15, alignItems: 'center' },
   addButtonDisabled: { backgroundColor: Colors.gray400 },
   addButtonText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900' },
   centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background, padding: Spacing.xxl },

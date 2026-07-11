@@ -28,6 +28,7 @@ import ParcelScreen      from './screens/ParcelScreen';
 import PrintDeliverScreen from './screens/PrintDeliverScreen';
 import PennyWorksScreen  from './screens/PennyWorksScreen';
 import ServiceCheckoutScreen from './screens/ServiceCheckoutScreen';
+import ServiceDetailScreen from './screens/ServiceDetailScreen';
 import ServiceBookingsScreen from './screens/ServiceBookingsScreen';
 import RentalsScreen     from './screens/RentalsScreen';
 import RentalDetailScreen from './screens/RentalDetailScreen';
@@ -307,6 +308,7 @@ export default function UserApp() {
         <Stack.Screen name="PrintDeliver"  component={PrintDeliverScreen} />
         <Stack.Screen name="PennyWorks"    component={PennyWorksScreen} />
         <Stack.Screen name="ServiceCheckout" component={ServiceCheckoutScreen} />
+        <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
         <Stack.Screen name="ServiceBookings" component={ServiceBookingsScreen} />
         <Stack.Screen name="Rentals"       component={RentalsScreen} />
         <Stack.Screen name="RentalDetail"  component={RentalDetailScreen} />

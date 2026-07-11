@@ -51,7 +51,7 @@ export default function AdvertiseBusinessScreen({ navigation }) {
 
       Alert.alert(
         'Ad submitted',
-        'Your business ad is now visible in the Home offers section.',
+        'Your business ad is now visible in the sponsored Home hero carousel.',
         [{ text: 'Done', onPress: () => navigation.goBack() }],
       );
     } catch (error) {

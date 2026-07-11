@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BackButton from '../components/BackButton';
-import { getMyOrders, reorderOrder } from '../services/orders';
+import { getMyOrders } from '../services/orders';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
@@ -16,7 +16,6 @@ export default function OrdersScreen({ navigation }) {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalOrders, setTotalOrders] = useState(0);
-  const [reorderingId, setReorderingId] = useState(null);
 
   const load = useCallback(async (nextPage = 1, append = false, refreshOnly = false) => {
     if (append) setLoadingMore(true);
@@ -46,18 +45,6 @@ export default function OrdersScreen({ navigation }) {
   const loadMore = () => {
     if (loading || refreshing || loadingMore || !hasMore) return;
     load(page + 1, true);
-  };
-
-  const handleReorder = async (order) => {
-    try {
-      setReorderingId(order.id);
-      await reorderOrder(order.id);
-      navigation.navigate('Cart');
-    } catch (error) {
-      Alert.alert('Could not reorder', error?.message || 'Please try again');
-    } finally {
-      setReorderingId(null);
-    }
   };
 
   return (
@@ -112,20 +99,6 @@ export default function OrdersScreen({ navigation }) {
                   <Text style={styles.otp}>OTP {order.deliveryOtp}</Text>
                 ) : null}
               </View>
-              {canReorder(order.status) ? (
-                <TouchableOpacity
-                  style={[styles.reorderButton, reorderingId === order.id && styles.reorderButtonDisabled]}
-                  activeOpacity={0.82}
-                  disabled={reorderingId === order.id}
-                  onPress={() => handleReorder(order)}
-                >
-                  {reorderingId === order.id ? (
-                    <ActivityIndicator color={Colors.white} size="small" />
-                  ) : (
-                    <Text style={styles.reorderButtonText}>Reorder</Text>
-                  )}
-                </TouchableOpacity>
-              ) : null}
             </TouchableOpacity>
           )}
         />
@@ -144,10 +117,6 @@ function statusStyle(status) {
   if (status === 'SHIPPED') return styles.shipped;
   if (status === 'CANCELLED') return styles.cancelled;
   return styles.pending;
-}
-
-function canReorder(status) {
-  return ['DELIVERED', 'CANCELLED'].includes(status);
 }
 
 const styles = StyleSheet.create({
@@ -171,9 +140,6 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
   total: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: '900' },
   otp: { color: Colors.textPrimary, backgroundColor: Colors.warningLight, borderRadius: Radius.sm, paddingHorizontal: 9, paddingVertical: 5, fontSize: FontSize.xs, fontWeight: '900' },
-  reorderButton: { marginTop: 12, backgroundColor: Colors.primary, borderRadius: Radius.sm, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
-  reorderButtonDisabled: { opacity: 0.65 },
-  reorderButtonText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
   empty: { color: Colors.textMuted, textAlign: 'center', marginTop: 60 },
   footer: { minHeight: 52, alignItems: 'center', justifyContent: 'center' },
   footerText: { color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '700' },

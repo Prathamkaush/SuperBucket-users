@@ -39,7 +39,7 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
     try {
       setSubmitting(true);
       await createServiceBooking({ packageId: servicePackage.id, providerId: provider?.id, scheduledAt: slot.toISOString(), address, customerNote: note });
-      Alert.alert('Booking requested', provider ? `${provider.name} has been assigned to your booking.` : 'Nearby providers can now accept your job.', [
+      Alert.alert('Service order placed', provider ? `${provider.name} has been assigned to your service order.` : 'Your service order is ready for a verified professional to accept.', [
         { text: 'View booking', onPress: () => navigation.replace('ServiceBookings') },
       ]);
     } catch (e) {
@@ -50,7 +50,7 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
-      <View style={styles.header}><BackButton onPress={() => navigation.goBack()} /><Text style={styles.headerTitle}>Confirm booking</Text></View>
+      <View style={styles.header}><BackButton onPress={() => navigation.goBack()} /><Text style={styles.headerTitle}>Confirm service order</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View> : (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.summary}>
@@ -78,8 +78,8 @@ export default function ServiceCheckoutScreen({ navigation, route }) {
           {!addresses.length ? <Text style={styles.empty}>No saved address found.</Text> : null}
           <Text style={styles.sectionTitle}>Anything we should know?</Text>
           <TextInput style={styles.note} multiline value={note} onChangeText={setNote} placeholder="Describe the issue (optional)" placeholderTextColor={Colors.textMuted} />
-          <TouchableOpacity style={[styles.confirm, submitting && styles.disabled]} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.confirmText}>Request booking - Rs {Number(servicePackage.price).toFixed(0)}</Text>}</TouchableOpacity>
-          <Text style={styles.disclaimer}>The price is set by Superbucket. Replacement parts, if required, must be approved by you separately.</Text>
+          <TouchableOpacity style={[styles.confirm, submitting && styles.disabled]} disabled={submitting} onPress={submit}>{submitting ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.confirmText}>Place service order - Rs {Number(servicePackage.price).toFixed(0)}</Text>}</TouchableOpacity>
+          <Text style={styles.disclaimer}>The service price is set by Superbucket admin and verified again by the server when this order is placed. Replacement parts require your separate approval.</Text>
         </ScrollView>
       )}
     </View>

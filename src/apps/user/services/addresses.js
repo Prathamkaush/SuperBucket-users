@@ -37,3 +37,9 @@ export function updateAddress(addressId, address) {
     throw err;
   });
 }
+
+export function deleteAddress(addressId) {
+  return authenticatedRequest(`/addresses/${addressId}`, {
+    method: 'DELETE',
+  });
+}

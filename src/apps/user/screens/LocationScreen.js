@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
-import { createAddress, getAddresses, updateAddress } from '../services/addresses';
+import { createAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from '../services/addresses';
 import { getProfile } from '../services/profile';
 import BackButton from '../components/BackButton';
 
@@ -110,6 +110,9 @@ export default function LocationScreen({ navigation, route }) {
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addressId, setAddressId] = useState(null);
+  const [addresses, setAddresses] = useState([]);
+  const [showForm, setShowForm] = useState(addNewAddress);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -121,52 +124,100 @@ export default function LocationScreen({ navigation, route }) {
         // Populate user name and phone from profile as default
         const userName = user?.name || '';
         const userPhone = user?.phone || '';
+        setAddresses(addresses);
+        if (addNewAddress) setIsDefault(addresses.length === 0);
 
-        // If user already has a saved address, pre-populate it unless user asked to add a fresh one.
-        const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
-        if (defaultAddr && !addNewAddress) {
-          setAddressId(defaultAddr.id);
-          setIsDefault(defaultAddr.isDefault);
-
-          const parsed = parseStreet(defaultAddr.street);
-          setSelectedType(parsed.type || 'Home');
-
-          setForm({
-            name: defaultAddr.name || userName,
-            phone: defaultAddr.phone || userPhone,
-            house: parsed.house || '',
-            area: parsed.area || '',
-            landmark: parsed.landmark || '',
-            city: defaultAddr.city || '',
-            state: defaultAddr.state || '',
-            pincode: defaultAddr.pincode || '',
-            floor: parsed.floor || '',
-            notes: parsed.notes || '',
-            latitude: defaultAddr.latitude ? String(defaultAddr.latitude) : '',
-            longitude: defaultAddr.longitude ? String(defaultAddr.longitude) : '',
-          });
-        } else {
-          setForm((current) => ({
-            ...current,
-            name: userName || current.name,
-            phone: userPhone || current.phone,
-          }));
-        }
+        setShowForm(addNewAddress || addresses.length === 0);
+        setForm((current) => ({
+          ...current,
+          name: userName || current.name,
+          phone: userPhone || current.phone,
+        }));
       })
       .catch((err) => {
         console.error('Error fetching profile or addresses:', err);
-      });
+      })
+      .finally(() => active && setLoadingAddresses(false));
 
     return () => {
       active = false;
     };
   }, [addNewAddress]);
 
+  const startAddAddress = () => {
+    setAddressId(null);
+    setSelectedType('Home');
+    setIsDefault(addresses.length === 0);
+    setForm((current) => ({
+      ...EMPTY_FORM,
+      name: current.name,
+      phone: current.phone,
+    }));
+    setShowForm(true);
+  };
+
+  const startEditAddress = (address) => {
+    const parsed = parseStreet(address.street);
+    setAddressId(address.id);
+    setSelectedType(parsed.type || 'Home');
+    setIsDefault(Boolean(address.isDefault));
+    setForm({
+      name: address.name || '',
+      phone: address.phone || '',
+      house: parsed.house || '',
+      area: parsed.area || '',
+      landmark: parsed.landmark || '',
+      city: address.city || '',
+      state: address.state || '',
+      pincode: address.pincode || '',
+      floor: parsed.floor || '',
+      notes: parsed.notes || '',
+      latitude: address.latitude ? String(address.latitude) : '',
+      longitude: address.longitude ? String(address.longitude) : '',
+    });
+    setShowForm(true);
+  };
+
+  const makeDefault = async (addressIdToSelect) => {
+    try {
+      await setDefaultAddress(addressIdToSelect);
+      setAddresses((current) => current.map((item) => ({
+        ...item,
+        isDefault: item.id === addressIdToSelect,
+      })));
+    } catch (error) {
+      Alert.alert('Could not update default address', error?.message || 'Please try again');
+    }
+  };
+
+  const confirmDelete = (address) => {
+    Alert.alert('Delete address?', 'This saved delivery address will be removed.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAddress(address.id);
+            setAddresses(await getAddresses());
+          } catch (error) {
+            Alert.alert('Could not delete address', error?.message || 'Please try again');
+          }
+        },
+      },
+    ]);
+  };
+
 
   const updateField = (key, value) => {
     const sanitized =
       key === 'phone' || key === 'pincode' ? value.replace(/\D/g, '') : value;
-    setForm((current) => ({ ...current, [key]: sanitized }));
+    const changesAddressLocation = ['house', 'area', 'landmark', 'city', 'state', 'pincode'].includes(key);
+    setForm((current) => ({
+      ...current,
+      [key]: sanitized,
+      ...(changesAddressLocation ? { latitude: '', longitude: '' } : {}),
+    }));
   };
 
   const detectCurrentLocation = async () => {
@@ -277,8 +328,9 @@ export default function LocationScreen({ navigation, route }) {
         city: form.city.trim(),
         state: form.state.trim(),
         pincode: form.pincode,
-        latitude: form.latitude ? Number(form.latitude) : undefined,
-        longitude: form.longitude ? Number(form.longitude) : undefined,
+        // Explicit nulls remove coordinates that became stale after a manual address edit.
+        latitude: form.latitude ? Number(form.latitude) : null,
+        longitude: form.longitude ? Number(form.longitude) : null,
         isDefault,
       };
 
@@ -291,7 +343,9 @@ export default function LocationScreen({ navigation, route }) {
       if (route?.params?.returnToCart) {
         navigation.navigate('MainTabs', { screen: 'Cart' });
       } else {
-        navigation.replace('MainTabs');
+        setAddresses(await getAddresses());
+        setShowForm(false);
+        setAddressId(null);
       }
     } catch (error) {
       Alert.alert('Could not save address', error?.message || 'Please try again');
@@ -299,6 +353,58 @@ export default function LocationScreen({ navigation, route }) {
       setSaving(false);
     }
   };
+
+  if (!showForm) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <BackButton onPress={() => navigation.goBack()} />
+            <Text style={styles.headerTitle}>Saved Addresses</Text>
+          </View>
+        </View>
+        {loadingAddresses ? (
+          <View style={styles.managerLoading}><ActivityIndicator color={Colors.primary} /></View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.addressList} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity style={styles.addAddressButton} onPress={startAddAddress}>
+              <Text style={styles.addAddressText}>+ ADD NEW ADDRESS</Text>
+            </TouchableOpacity>
+
+            {addresses.map((address) => {
+              const type = parseStreet(address.street).type || 'Other';
+              return (
+                <View key={address.id} style={[styles.savedCard, address.isDefault && styles.savedCardDefault]}>
+                  <View style={styles.savedTopRow}>
+                    <Text style={styles.savedType}>{type}</Text>
+                    {address.isDefault ? <Text style={styles.savedDefaultBadge}>DEFAULT</Text> : null}
+                  </View>
+                  <Text style={styles.savedName}>{address.name} · {address.phone}</Text>
+                  <Text style={styles.savedAddress}>
+                    {address.street}, {address.city}, {address.state} {address.pincode}
+                  </Text>
+                  <View style={styles.savedActions}>
+                    <TouchableOpacity onPress={() => startEditAddress(address)}>
+                      <Text style={styles.savedActionText}>Edit</Text>
+                    </TouchableOpacity>
+                    {!address.isDefault ? (
+                      <TouchableOpacity onPress={() => makeDefault(address.id)}>
+                        <Text style={styles.savedActionText}>Make default</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity onPress={() => confirmDelete(address)}>
+                      <Text style={[styles.savedActionText, styles.deleteText]}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    );
+  }
 
 
   return (
@@ -309,8 +415,8 @@ export default function LocationScreen({ navigation, route }) {
       <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <BackButton onPress={() => navigation.goBack()} />
-          <Text style={styles.headerTitle}>Delivery Address</Text>
+          <BackButton onPress={() => addresses.length && !route?.params?.returnToCart ? setShowForm(false) : navigation.goBack()} />
+          <Text style={styles.headerTitle}>{addressId ? 'Edit Address' : 'Add Address'}</Text>
         </View>
 
       </View>
@@ -407,7 +513,7 @@ export default function LocationScreen({ navigation, route }) {
           {saving ? (
             <ActivityIndicator color={Colors.white} />
           ) : (
-            <Text style={styles.saveText}>SAVE ADDRESS</Text>
+            <Text style={styles.saveText}>{addressId ? 'UPDATE ADDRESS' : 'SAVE ADDRESS'}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -417,6 +523,45 @@ export default function LocationScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  managerLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  addressList: { padding: Spacing.xl, paddingBottom: 50 },
+  addAddressButton: {
+    minHeight: 52,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primaryLight,
+  },
+  addAddressText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '800' },
+  savedCard: {
+    marginBottom: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.white,
+    ...Shadow.sm,
+  },
+  savedCardDefault: { borderWidth: 1.5, borderColor: Colors.primary },
+  savedTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  savedType: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '800' },
+  savedDefaultBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    color: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  savedName: { marginTop: 10, color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '700' },
+  savedAddress: { marginTop: 5, color: Colors.textSecondary, fontSize: FontSize.sm, lineHeight: 20 },
+  savedActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 22, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
+  savedActionText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '800' },
+  deleteText: { color: Colors.danger },
   header: {
     paddingTop: 48,
     paddingBottom: 20,

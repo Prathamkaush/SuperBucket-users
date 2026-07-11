@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
@@ -38,6 +37,7 @@ const SORT_OPTIONS = [
   { label: 'Price: Low to High', value: 'low_to_high' },
   { label: 'Price: High to Low', value: 'high_to_low' },
 ];
+const PAGE_SIZE = 10;
 
 function collectAttributeOptions(products) {
   const groups = {};
@@ -91,7 +91,11 @@ export default function MarketplaceScreen({ navigation, route }) {
   const [search, setSearch] = useState(initialSearch);
   const [submittedSearch, setSubmittedSearch] = useState(initialSearch);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     setSelectedTypeId(null);
@@ -103,13 +107,19 @@ export default function MarketplaceScreen({ navigation, route }) {
     setSubmittedSearch(nextSearch);
   }, [route.params?.search]);
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (nextPage = 1, append = false) => {
+    if (append && loadingMoreRef.current) return;
     try {
-      setLoading(true);
+      if (append) {
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setError('');
       const response = await getProducts({
-        page: 1,
-        limit: 20,
+        page: nextPage,
+        limit: PAGE_SIZE,
         categoryId,
         typeId: selectedTypeId || undefined,
         search: submittedSearch.trim() || undefined,
@@ -118,18 +128,43 @@ export default function MarketplaceScreen({ navigation, route }) {
         stock: filters.stock || undefined,
         sort: filters.sort || undefined,
       });
-      setAttributeOptions(collectAttributeOptions(response.products));
-      setProducts(
-        response.products.filter((product) =>
-          matchesAttributes(product, filters.attributes),
-        ),
+      const visibleProducts = response.products.filter((product) =>
+        matchesAttributes(product, filters.attributes),
+      );
+      const nextAttributeOptions = collectAttributeOptions(response.products);
+      setAttributeOptions((current) => append
+        ? mergeAttributeOptions(current, nextAttributeOptions)
+        : nextAttributeOptions,
+      );
+      setProducts((current) => append
+        ? mergeProducts(current, visibleProducts)
+        : visibleProducts,
+      );
+      const currentPage = Number(response.page || nextPage);
+      const pagesValue = response.pages ?? response.totalPages;
+      setPage(currentPage);
+      setHasMore(pagesValue !== undefined
+        ? currentPage < Number(pagesValue)
+        : response.products.length === PAGE_SIZE,
       );
     } catch (loadError) {
-      setError(loadError?.message || 'Unable to load products');
+      if (append) {
+        // Keep the products already on screen if a later page temporarily fails.
+        setHasMore(false);
+      } else {
+        setError(loadError?.message || 'Unable to load products');
+      }
     } finally {
       setLoading(false);
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
     }
   }, [categoryId, filters, selectedTypeId, submittedSearch]);
+
+  const loadMoreProducts = () => {
+    if (loading || loadingMore || !hasMore) return;
+    loadProducts(page + 1, true);
+  };
 
   const loadTypes = useCallback(async () => {
     try {
@@ -147,13 +182,19 @@ export default function MarketplaceScreen({ navigation, route }) {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProducts();
-      loadTypes();
-      loadCategories();
-    }, [loadCategories, loadProducts, loadTypes]),
-  );
+  // Keep shop data mounted when switching tabs. Requests run only when the
+  // category/search/filter query changes; the product service also caches pages.
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    loadTypes();
+  }, [loadTypes]);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   const openFilters = () => {
     setDraftFilters({
@@ -333,6 +374,18 @@ export default function MarketplaceScreen({ navigation, route }) {
           numColumns={2}
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.row}
+          onEndReached={loadMoreProducts}
+          onEndReachedThreshold={0.45}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews
+          ListFooterComponent={loadingMore ? (
+            <View style={styles.loadMoreFooter}>
+              <ActivityIndicator color={Colors.primary} />
+              <Text style={styles.stateText}>Loading more products...</Text>
+            </View>
+          ) : null}
           ListEmptyComponent={
             <View style={styles.stateBox}>
               <Text style={styles.stateTitle}>No products found</Text>
@@ -366,6 +419,11 @@ export default function MarketplaceScreen({ navigation, route }) {
                     </Text>
                   </View>
                 )}
+                {item.mrp > item.price ? (
+                  <View style={styles.discountBadge}>
+                    <Text style={styles.discountBadgeText}>{Math.round(((item.mrp - item.price) / item.mrp) * 100)}% OFF</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.categoryText} numberOfLines={1}>
                 {item.category}
@@ -373,6 +431,12 @@ export default function MarketplaceScreen({ navigation, route }) {
               <Text style={styles.productName} numberOfLines={2}>
                 {item.name}
               </Text>
+              {item.reviewCount > 0 ? (
+                <View style={styles.ratingRow}>
+                  <Text style={styles.ratingStars}>★ {item.averageRating.toFixed(1)}</Text>
+                  <Text style={styles.ratingCount}>({item.reviewCount})</Text>
+                </View>
+              ) : null}
               {item.variants[0] && (
                 <Text style={styles.variantText} numberOfLines={1}>
                   {item.variants[0].label}
@@ -387,12 +451,13 @@ export default function MarketplaceScreen({ navigation, route }) {
                   {item.mrp > item.price && (
                     <Text style={styles.mrp}>Rs {item.mrp.toLocaleString()}</Text>
                   )}
+                  <Text style={styles.taxText}>Inclusive of taxes</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={() => openProduct(item)}
                 >
-                  <Text style={styles.addButtonText}>ADD</Text>
+                  <Feather name="arrow-up-right" size={16} color={Colors.white} />
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -517,6 +582,20 @@ export default function MarketplaceScreen({ navigation, route }) {
   );
 }
 
+function mergeProducts(current, incoming) {
+  const seen = new Set(current.map((product) => product.id));
+  return [...current, ...incoming.filter((product) => !seen.has(product.id))];
+}
+
+function mergeAttributeOptions(current, incoming) {
+  const groups = new Map(current.map((group) => [group.name, new Set(group.values)]));
+  incoming.forEach((group) => {
+    if (!groups.has(group.name)) groups.set(group.name, new Set());
+    group.values.forEach((value) => groups.get(group.name).add(value));
+  });
+  return [...groups.entries()].map(([name, values]) => ({ name, values: [...values] }));
+}
+
 function FilterOption({ label, selected, onPress }) {
   return (
     <TouchableOpacity
@@ -613,72 +692,87 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   filterButtonText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
-  list: { padding: Spacing.md, paddingBottom: 100, flexGrow: 1 },
-  row: { gap: 10 },
+  list: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 100, flexGrow: 1 },
+  row: { gap: 12 },
   productCard: {
     flex: 1,
-    marginBottom: 10,
-    borderRadius: Radius.lg,
+    marginBottom: 14,
+    borderRadius: 18,
     backgroundColor: Colors.white,
-    padding: 10,
-    ...Shadow.sm,
+    padding: 0,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+    ...Shadow.md,
   },
   imageBox: {
-    height: 130,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.gray100,
+    height: 168,
+    backgroundColor: '#F7F7F5',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
   },
-  productImage: { width: '100%', height: '100%' },
+  productImage: { width: '88%', height: '88%' },
   imageFallback: { color: Colors.secondary, fontSize: 48, fontWeight: '900' },
   stockBadge: {
     position: 'absolute',
-    top: 7,
-    right: 7,
+    top: 10,
+    right: 10,
     borderRadius: Radius.full,
     backgroundColor: Colors.warning,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
+  discountBadge: { position: 'absolute', left: 10, top: 10, borderRadius: Radius.full, backgroundColor: '#111827', paddingHorizontal: 8, paddingVertical: 5 },
+  discountBadgeText: { color: Colors.white, fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
   stockBadgeText: { color: Colors.white, fontSize: 9, fontWeight: '900' },
   categoryText: {
-    marginTop: 9,
-    color: Colors.secondary,
+    marginTop: 13,
+    marginHorizontal: 13,
+    color: Colors.textMuted,
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   productName: {
-    minHeight: 38,
-    marginTop: 3,
+    minHeight: 42,
+    marginTop: 5,
+    marginHorizontal: 13,
     color: Colors.textPrimary,
-    fontSize: FontSize.sm,
-    fontWeight: '800',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
   },
-  variantText: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 3 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, marginHorizontal: 13 },
+  ratingStars: { color: '#92400E', fontSize: FontSize.xs, fontWeight: '800', backgroundColor: '#FEF3C7', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
+  ratingCount: { color: Colors.textMuted, fontSize: FontSize.xs },
+  variantText: { color: Colors.textMuted, fontSize: 11, marginTop: 6, marginHorizontal: 13 },
   priceRow: {
-    marginTop: 10,
+    marginTop: 13,
+    padding: 13,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15,23,42,0.06)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  price: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' },
+  price: { color: '#111827', fontSize: 17, fontWeight: '900', letterSpacing: -0.3 },
   mrp: {
     color: Colors.textMuted,
     fontSize: 10,
     textDecorationLine: 'line-through',
   },
+  taxText: { color: Colors.textMuted, fontSize: 8, marginTop: 3 },
   addButton: {
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111827',
   },
-  addButtonText: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
   stateBox: {
     flex: 1,
     minHeight: 280,
@@ -686,6 +780,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.xxl,
   },
+  loadMoreFooter: { minHeight: 72, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
   stateTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
   stateText: {
     marginTop: 7,

@@ -1,106 +1,60 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
-  RefreshControl,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Star } from 'lucide-react-native';
+import { Feather } from '@expo/vector-icons';
 import BackButton from '../components/BackButton';
-import { getUploadUrl } from '../services/api';
-import { getServiceCatalog, getServiceProviders } from '../services/serviceMarketplace';
+import { getServiceCatalog } from '../services/serviceMarketplace';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 
-const PAGE_SIZE = 10;
-
 export default function PennyWorksScreen({ navigation, route }) {
-  const searchTerm = String(route.params?.search || '').trim();
   const [catalog, setCatalog] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [providers, setProviders] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [search, setSearch] = useState(String(route.params?.search || ''));
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedCategory = catalog.find((item) => item.id === selectedId) || catalog[0];
-
-  const loadCatalog = useCallback(async () => {
-    const data = await getServiceCatalog();
-    const visible = searchTerm ? filterCatalog(data, searchTerm) : data;
-    setCatalog(visible);
-    setSelectedId((current) => (
-      visible.some((item) => item.id === current) ? current : visible[0]?.id || null
-    ));
-  }, [searchTerm]);
-
-  const loadProviders = useCallback(async (nextPage = 1, append = false) => {
-    const categoryId = selectedCategory?.id;
-    if (!categoryId) {
-      setProviders([]);
-      setHasMore(false);
-      return;
-    }
-
-    if (append) setLoadingMore(true);
-    else setLoading(true);
-
+  const load = useCallback(async () => {
     try {
+      setLoading(true);
       setError('');
-      const response = await getServiceProviders({ categoryId, page: nextPage, limit: PAGE_SIZE });
-      setProviders((current) => (append ? [...current, ...(response.items || [])] : response.items || []));
-      setPage(nextPage);
-      setHasMore(Boolean(response.meta?.hasMore));
+      const data = await getServiceCatalog();
+      setCatalog(data);
     } catch (loadError) {
-      setError(loadError?.message || 'Unable to load providers');
+      setError(loadError?.message || 'Unable to load services');
     } finally {
       setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
     }
-  }, [selectedCategory?.id]);
+  }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      loadCatalog().catch((loadError) => {
-        setError(loadError?.message || 'Unable to load services');
-        setLoading(false);
-      });
-    }, [loadCatalog]),
-  );
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  useEffect(() => {
-    if (selectedCategory?.id) loadProviders(1, false);
-  }, [selectedCategory?.id, loadProviders]);
+  const visibleCatalog = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return catalog;
+    return catalog.filter((category) =>
+      `${category.name} ${category.description || ''} ${(category.packages || []).map((item) => `${item.name} ${item.description || ''}`).join(' ')}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [catalog, search]);
 
-  const refresh = async () => {
-    setRefreshing(true);
-    await loadCatalog().catch((loadError) => setError(loadError?.message || 'Unable to load services'));
-    await loadProviders(1, false);
-  };
+  const selectedCategory = visibleCatalog.find((item) => item.id === selectedId) || null;
+  const packages = selectedCategory
+    ? selectedCategory.packages || []
+    : visibleCatalog.flatMap((category) => (category.packages || []).map((item) => ({ ...item, category })));
 
-  const loadMore = () => {
-    if (!hasMore || loading || loadingMore) return;
-    loadProviders(page + 1, true);
-  };
-
-  const openCheckout = (provider) => {
-    const servicePackage = selectedCategory?.packages?.[0] || provider.categories?.[0]?.packages?.[0];
-    if (!servicePackage) return;
-    navigation.navigate('ServiceCheckout', {
-      servicePackage,
-      category: selectedCategory,
-      provider,
-    });
+  const openService = (servicePackage, category = selectedCategory || servicePackage.category) => {
+    navigation.navigate('ServiceDetail', { servicePackage, category });
   };
 
   return (
@@ -109,175 +63,92 @@ export default function PennyWorksScreen({ navigation, route }) {
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Penny Works</Text>
-          <Text style={styles.subtitle}>
-            {searchTerm ? `Search results for "${searchTerm}"` : 'Choose a verified service partner'}
-          </Text>
+          <Text style={styles.title}>Home Services</Text>
+          <Text style={styles.subtitle}>Admin-priced services from verified professionals</Text>
         </View>
       </View>
 
-      <View style={styles.categoryBand}>
+      {loading ? <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View> : error ? (
+        <View style={styles.center}>
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity style={styles.retry} onPress={load}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
+        </View>
+      ) : (
         <FlatList
-          horizontal
-          data={catalog}
+          data={packages}
           keyExtractor={(item) => String(item.id)}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryList}
+          contentContainerStyle={styles.content}
+          ListHeaderComponent={(
+            <>
+              <View style={styles.hero}>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroEyebrow}>ALL YOUR HOME REPAIR NEEDS</Text>
+                  <Text style={styles.heroTitle}>Expert service, one tap away.</Text>
+                  <Text style={styles.heroText}>Choose a service and book at the price set by Superbucket.</Text>
+                </View>
+                <View style={styles.heroIcon}><Feather name="tool" size={42} color={Colors.white} /></View>
+              </View>
+
+              <View style={styles.searchBox}>
+                <Feather name="search" size={18} color={Colors.textMuted} />
+                <TextInput style={styles.searchInput} value={search} onChangeText={setSearch} placeholder="Search for a service" placeholderTextColor={Colors.textMuted} />
+              </View>
+
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Shop by category</Text>
+                {selectedCategory ? <TouchableOpacity onPress={() => setSelectedId(null)}><Text style={styles.viewAll}>View all</Text></TouchableOpacity> : null}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {visibleCatalog.map((category) => {
+                  const active = selectedCategory?.id === category.id;
+                  return (
+                    <TouchableOpacity key={category.id} style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={() => setSelectedId(active ? null : category.id)}>
+                      <Text style={styles.categoryIcon}>{category.icon || category.name.charAt(0)}</Text>
+                      <Text style={[styles.categoryName, active && styles.categoryNameActive]} numberOfLines={2}>{category.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={styles.servicesTitle}>{selectedCategory ? selectedCategory.name : 'Book a service'}</Text>
+            </>
+          )}
+          ListEmptyComponent={<Text style={styles.empty}>No active services found.</Text>}
           renderItem={({ item }) => {
-            const active = selectedCategory?.id === item.id;
+            const category = selectedCategory || item.category;
             return (
-              <TouchableOpacity
-                style={[styles.categoryChip, active && styles.categoryChipActive]}
-                onPress={() => {
-                  setSelectedId(item.id);
-                  setProviders([]);
-                }}
-              >
-                <Text style={styles.categoryIcon}>{item.icon || item.name?.charAt(0) || 'S'}</Text>
-                <Text style={[styles.categoryText, active && styles.categoryTextActive]} numberOfLines={1}>
-                  {item.name}
-                </Text>
+              <TouchableOpacity style={styles.serviceCard} activeOpacity={0.86} onPress={() => openService(item, category)}>
+                <View style={styles.serviceIcon}><Feather name="tool" size={22} color={Colors.primary} /></View>
+                <View style={styles.serviceCopy}>
+                  <Text style={styles.serviceName}>{item.name}</Text>
+                  <Text style={styles.serviceDescription} numberOfLines={2}>{item.description || category?.description || 'Professional home service'}</Text>
+                  <Text style={styles.serviceMeta}>{item.durationMinutes} min · Price set by Superbucket</Text>
+                </View>
+                <View style={styles.priceBox}>
+                  <Text style={styles.price}>Rs {Number(item.price).toFixed(0)}</Text>
+                  <Text style={styles.book}>Book</Text>
+                </View>
               </TouchableOpacity>
             );
           }}
-        />
-      </View>
-
-      {loading && !providers.length ? (
-        <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View>
-      ) : (
-        <FlatList
-          data={providers}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Colors.primary} />}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.45}
-          ListHeaderComponent={(
-            <View style={styles.listHeader}>
-              <Text style={styles.listTitle}>{selectedCategory?.name || 'Service providers'}</Text>
-              <Text style={styles.listSub}>Showing 10 providers at a time. Scroll for more.</Text>
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-            </View>
-          )}
-          ListEmptyComponent={!error ? <Text style={styles.empty}>No providers are online for this category right now.</Text> : null}
-          ListFooterComponent={loadingMore ? <ActivityIndicator color={Colors.primary} style={{ padding: 18 }} /> : null}
-          renderItem={({ item }) => (
-            <ProviderCard provider={item} onBook={() => openCheckout(item)} />
-          )}
         />
       )}
     </View>
   );
 }
 
-function ProviderCard({ provider, onBook }) {
-  const imageUrl = provider.profileImage ? getUploadUrl('profiles', provider.profileImage) : null;
-  const rating = provider.averageRating || 'New';
-  const price = provider.startingPrice ? `From Rs ${Number(provider.startingPrice).toFixed(0)}` : 'Price shown at booking';
-
-  return (
-    <View style={styles.providerCard}>
-      <View style={styles.providerTop}>
-        <View style={styles.avatar}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarText}>{provider.name?.charAt(0) || 'P'}</Text>
-          )}
-        </View>
-        <View style={styles.providerCopy}>
-          <View style={styles.nameRow}>
-            <Text style={styles.providerName} numberOfLines={1}>{provider.name}</Text>
-            <View style={styles.ratingPill}>
-              <Star size={12} color={Colors.warning} fill={Colors.warning} />
-              <Text style={styles.ratingText}>{rating}</Text>
-            </View>
-          </View>
-          <Text style={styles.providerMeta} numberOfLines={1}>
-            {provider.experienceYears || 0} yrs exp · {provider.city || 'Nearby'}
-          </Text>
-          <Text style={styles.providerBio} numberOfLines={2}>
-            {provider.bio || 'Verified Superbucket service partner available for bookings.'}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.providerBottom}>
-        <View>
-          <Text style={styles.price}>{price}</Text>
-          <Text style={styles.jobs}>{provider.completedJobs || 0} jobs · {provider.ratingCount || 0} ratings</Text>
-        </View>
-        <TouchableOpacity style={styles.bookButton} onPress={onBook}>
-          <Text style={styles.bookText}>Book</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function filterCatalog(catalog = [], term = '') {
-  const query = term.toLowerCase();
-  return catalog.filter((category) => {
-    const categoryText = `${category.name || ''} ${category.description || ''}`.toLowerCase();
-    const packageText = (category.packages || [])
-      .map((item) => `${item.name || ''} ${item.description || ''}`)
-      .join(' ')
-      .toLowerCase();
-    return categoryText.includes(query) || packageText.includes(query);
-  });
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { paddingTop: 50, paddingHorizontal: Spacing.lg, paddingBottom: 16, backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerCopy: { flex: 1 },
-  title: { fontSize: FontSize.xl, fontWeight: '900', color: Colors.textPrimary },
-  subtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  categoryBand: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  categoryList: { paddingHorizontal: Spacing.lg, paddingVertical: 12, gap: 10 },
-  categoryChip: {
-    width: 96,
-    minHeight: 78,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-  },
-  categoryChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  categoryIcon: { fontSize: 20, fontWeight: '900', color: Colors.primary },
-  categoryText: { marginTop: 6, color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '800', textAlign: 'center' },
-  categoryTextActive: { color: Colors.primary },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: Spacing.lg, paddingBottom: 70 },
-  listHeader: { marginBottom: 12 },
-  listTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
-  listSub: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 3 },
-  error: { color: Colors.danger, marginTop: 10, fontSize: FontSize.xs, fontWeight: '700' },
-  empty: { color: Colors.textMuted, textAlign: 'center', padding: 28 },
-  providerCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.md,
-    padding: 14,
-    marginBottom: 12,
-    ...Shadow.sm,
-  },
-  providerTop: { flexDirection: 'row', gap: 12 },
-  avatar: { width: 58, height: 58, borderRadius: 29, backgroundColor: Colors.secondaryLight, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: Colors.secondary, fontSize: FontSize.xl, fontWeight: '900' },
-  providerCopy: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  providerName: { flex: 1, color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' },
-  ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.warningLight, borderRadius: Radius.full, paddingHorizontal: 7, paddingVertical: 4 },
-  ratingText: { color: Colors.textPrimary, fontSize: FontSize.xxs, fontWeight: '900' },
-  providerMeta: { color: Colors.secondary, fontSize: FontSize.xs, fontWeight: '800', marginTop: 4 },
-  providerBio: { color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 17, marginTop: 6 },
-  providerBottom: { marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  price: { color: Colors.primary, fontSize: FontSize.md, fontWeight: '900' },
-  jobs: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 3 },
-  bookButton: { backgroundColor: Colors.primary, borderRadius: Radius.md, paddingHorizontal: 22, paddingVertical: 11 },
-  bookText: { color: Colors.white, fontSize: FontSize.sm, fontWeight: '900' },
+  headerCopy: { flex: 1 }, title: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '900' }, subtitle: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 2 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }, error: { color: Colors.danger, textAlign: 'center' }, retry: { marginTop: 14, backgroundColor: Colors.primary, borderRadius: Radius.full, paddingHorizontal: 20, paddingVertical: 9 }, retryText: { color: Colors.white, fontWeight: '800' },
+  content: { padding: Spacing.lg, paddingBottom: 80 },
+  hero: { minHeight: 180, flexDirection: 'row', alignItems: 'center', borderRadius: Radius.lg, padding: 20, backgroundColor: '#073B7A', overflow: 'hidden', ...Shadow.md },
+  heroCopy: { flex: 1 }, heroEyebrow: { color: '#FBBF24', fontSize: 10, fontWeight: '900' }, heroTitle: { marginTop: 6, color: Colors.white, fontSize: 25, lineHeight: 29, fontWeight: '900' }, heroText: { marginTop: 8, color: 'rgba(255,255,255,0.78)', fontSize: FontSize.xs, lineHeight: 17 },
+  heroIcon: { width: 78, height: 78, marginLeft: 12, borderRadius: 39, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  searchBox: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white, paddingHorizontal: 13 }, searchInput: { flex: 1, paddingVertical: 12, color: Colors.textPrimary },
+  sectionHeader: { marginTop: 24, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' }, viewAll: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800' },
+  categoryRow: { gap: 10, paddingBottom: 4 }, categoryCard: { width: 88, minHeight: 90, alignItems: 'center', justifyContent: 'center', padding: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white }, categoryCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight }, categoryIcon: { color: Colors.primary, fontSize: 25, fontWeight: '900' }, categoryName: { marginTop: 7, color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '800', textAlign: 'center' }, categoryNameActive: { color: Colors.primary },
+  servicesTitle: { marginTop: 25, marginBottom: 12, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
+  serviceCard: { marginBottom: 11, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.md, backgroundColor: Colors.white, ...Shadow.sm }, serviceIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight }, serviceCopy: { flex: 1 }, serviceName: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' }, serviceDescription: { marginTop: 3, color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 16 }, serviceMeta: { marginTop: 5, color: Colors.textMuted, fontSize: 10 }, priceBox: { alignItems: 'flex-end' }, price: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' }, book: { marginTop: 6, color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' }, empty: { padding: 30, textAlign: 'center', color: Colors.textMuted },
 });

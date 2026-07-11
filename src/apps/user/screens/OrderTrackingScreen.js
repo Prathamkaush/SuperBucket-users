@@ -22,6 +22,7 @@ import {
   ShoppingBag,
   UserRound,
 } from 'lucide-react-native';
+import * as Location from 'expo-location';
 import BackButton from '../components/BackButton';
 import { getMyOrder } from '../services/orders';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
@@ -36,6 +37,7 @@ export default function OrderTrackingScreen({ navigation, route }) {
   const orderId = route?.params?.orderId || initialOrder?.orderId || initialOrder?.id;
   const [order, setOrder] = useState(initialOrder);
   const [loading, setLoading] = useState(Boolean(orderId));
+  const [resolvedCustomerPoint, setResolvedCustomerPoint] = useState(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -73,20 +75,43 @@ export default function OrderTrackingScreen({ navigation, route }) {
   }, [pulseAnim]);
 
   const steps = buildSteps(order);
-  const riderPhone = order?.deliveryPartnerPhone;
-  const driverPoint = coordinateFrom({
+  const riderName = order?.deliveryPartner?.name || order?.deliveryPartnerName;
+  const riderPhone = order?.deliveryPartner?.phone || order?.deliveryPartnerPhone;
+  const dropAddress = customerAddress(order?.address);
+  const trackingActive = Boolean(order?.status === 'SHIPPED' && (
+    order?.deliveryPartner?.id || order?.deliveryPartnerName || order?.deliveryLocationUpdatedAt
+  ));
+  const driverPoint = trackingActive ? coordinateFrom({
     latitude: order?.deliveryLatitude,
     longitude: order?.deliveryLongitude,
-  });
-  const shopPoint = coordinateFrom(order?.shop);
-  const customerPoint = coordinateFrom(order?.address);
-  const mapPoints = [driverPoint, shopPoint, customerPoint].filter(Boolean);
-  const mapRegion = useMemo(() => buildRegion(mapPoints), [driverPoint, shopPoint, customerPoint]);
+  }, true) : null;
+  const customerPoint = trackingActive
+    ? coordinateFrom(order?.address, true) || resolvedCustomerPoint
+    : null;
+  const mapPoints = [driverPoint, customerPoint].filter(Boolean);
+  const mapRegion = useMemo(() => buildRegion(mapPoints), [driverPoint, customerPoint]);
   const routeLine = [driverPoint, customerPoint].filter(Boolean);
-  const hasLiveLocation = Boolean(driverPoint && order?.status === 'SHIPPED');
+  const hasLiveLocation = Boolean(trackingActive && driverPoint);
   const canShowNativeMap = Boolean(NativeMaps && mapRegion);
+  const eta = estimateArrival(driverPoint, customerPoint);
+
+  useEffect(() => {
+    let active = true;
+    if (!trackingActive || coordinateFrom(order?.address, true) || !order?.address) {
+      setResolvedCustomerPoint(null);
+      return () => { active = false; };
+    }
+
+    Location.geocodeAsync(`${dropAddress}, India`)
+      .then((results) => {
+        if (active) setResolvedCustomerPoint(coordinateFrom(results?.[0], true));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [trackingActive, dropAddress]);
+
   const openExternalMap = () => {
-    const destination = driverPoint || shopPoint || customerPoint;
+    const destination = driverPoint || customerPoint;
     if (!destination) return;
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${destination.latitude},${destination.longitude}`).catch(() => {});
   };
@@ -112,14 +137,11 @@ export default function OrderTrackingScreen({ navigation, route }) {
           <View style={styles.mapWrap}>
             {canShowNativeMap ? (
               <NativeMaps.MapView style={styles.map} region={mapRegion} showsUserLocation={false}>
-                {shopPoint ? (
-                  <NativeMaps.Marker coordinate={shopPoint} title={order?.shop?.name || 'Pickup'} pinColor={Colors.warning} />
-                ) : null}
                 {customerPoint ? (
                   <NativeMaps.Marker coordinate={customerPoint} title="Your delivery address" pinColor={Colors.primary} />
                 ) : null}
                 {driverPoint ? (
-                  <NativeMaps.Marker coordinate={driverPoint} title={order?.deliveryPartnerName || 'Delivery partner'}>
+                  <NativeMaps.Marker coordinate={driverPoint} title={riderName || 'Delivery partner'}>
                     <Animated.View style={[styles.driverMarker, { transform: [{ scale: pulseAnim }] }]}>
                       <Bike size={19} color={Colors.white} strokeWidth={2.8} />
                     </Animated.View>
@@ -150,9 +172,9 @@ export default function OrderTrackingScreen({ navigation, route }) {
               </View>
               <Text style={styles.mapText}>{trackingHeadline(order)}</Text>
               <Text style={styles.mapEta}>
-                {order?.deliveryLocationUpdatedAt
+                {eta || (order?.deliveryLocationUpdatedAt
                   ? `Updated ${new Date(order.deliveryLocationUpdatedAt).toLocaleTimeString()}`
-                  : order?.deliverySlotLabel || 'Instant delivery'}
+                  : trackingActive ? 'Waiting for rider GPS location' : 'Live tracking starts after rider accepts')}
               </Text>
             </View>
           </View>
@@ -201,8 +223,8 @@ export default function OrderTrackingScreen({ navigation, route }) {
                 <UserRound size={25} color={Colors.primary} strokeWidth={2.4} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.riderName}>{order?.deliveryPartnerName || 'Assigned after dispatch'}</Text>
-                <Text style={styles.riderDetails}>{order?.deliveryPartnerPhone || 'Rider contact appears when assigned'}</Text>
+                <Text style={styles.riderName}>{riderName || 'Assigned after dispatch'}</Text>
+                <Text style={styles.riderDetails}>{riderPhone || 'Rider contact appears when assigned'}</Text>
                 <View style={styles.ratingBadge}>
                   <Text style={styles.ratingText}>{order?.deliverySlotLabel || 'Instant delivery'}</Text>
                 </View>
@@ -238,7 +260,10 @@ function getNativeMaps() {
 
 function trackingHeadline(order) {
   if (order?.status === 'DELIVERED') return 'Delivered successfully';
-  if (order?.status === 'SHIPPED' && order?.deliveryLatitude) return 'Rider location is live';
+  if (order?.status === 'SHIPPED' && coordinateFrom({
+    latitude: order?.deliveryLatitude,
+    longitude: order?.deliveryLongitude,
+  }, true)) return 'Rider location is live';
   if (order?.status === 'SHIPPED') return 'Out for delivery';
   if (order?.status === 'CONFIRMED') return 'Packing your order';
   return 'Order received';
@@ -258,11 +283,43 @@ function formatTime(value) {
   return value ? new Date(value).toLocaleString() : 'Pending';
 }
 
-function coordinateFrom(value) {
+function coordinateFrom(value, indiaOnly = false) {
   const latitude = Number(value?.latitude ?? value?.lat);
   const longitude = Number(value?.longitude ?? value?.lng);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (
+    !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+    latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 ||
+    (latitude === 0 && longitude === 0)
+  ) return null;
+  if (indiaOnly && (latitude < 6 || latitude > 38 || longitude < 68 || longitude > 98)) return null;
   return { latitude, longitude };
+}
+
+function customerAddress(address) {
+  if (!address) return '';
+  return [address.street, address.city, address.state, address.pincode].filter(Boolean).join(', ');
+}
+
+function estimateArrival(driver, customer) {
+  if (!driver || !customer) return null;
+  const distanceKm = haversineKm(driver, customer);
+  if (distanceKm < 0.25) return 'Rider is arriving now';
+
+  // City-delivery estimate. It refreshes as the rider's live GPS position changes.
+  const minutes = Math.max(5, Math.ceil((distanceKm / 20) * 60));
+  const lower = Math.max(5, Math.floor(minutes / 5) * 5);
+  const upper = Math.max(lower + 5, Math.ceil((minutes + 5) / 5) * 5);
+  return `Approx. arrival in ${lower}-${upper} min`;
+}
+
+function haversineKm(from, to) {
+  const radians = (degrees) => degrees * Math.PI / 180;
+  const latDelta = radians(to.latitude - from.latitude);
+  const lngDelta = radians(to.longitude - from.longitude);
+  const a = Math.sin(latDelta / 2) ** 2 +
+    Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) *
+    Math.sin(lngDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function buildRegion(points) {
