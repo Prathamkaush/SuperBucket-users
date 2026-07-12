@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
-import { apiRequest } from './api';
+import { apiRequest, getUploadUrl } from './api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -49,8 +49,18 @@ export async function registerForPushNotifications(authToken, app = 'user') {
   });
 }
 
-export function getNotifications(page = 1, limit = 30) {
-  return authenticatedRequest(`/notifications/my?page=${page}&limit=${limit}`);
+export async function getNotifications(page = 1, limit = 30) {
+  const response = await authenticatedRequest(`/notifications/my?page=${page}&limit=${limit}`);
+  return {
+    ...response,
+    items: (response.items || []).map((item) => ({
+      ...item,
+      imageUrl: getUploadUrl(
+        'notifications',
+        item.imageUrl?.replace(/^\/uploads\/notifications\//, '/notification-images/'),
+      ),
+    })),
+  };
 }
 
 export function markNotificationRead(id) {
@@ -59,6 +69,10 @@ export function markNotificationRead(id) {
 
 export function markAllNotificationsRead() {
   return authenticatedRequest('/notifications/read-all', { method: 'PATCH' });
+}
+
+export function deleteNotification(id) {
+  return authenticatedRequest(`/notifications/${id}`, { method: 'DELETE' });
 }
 
 async function authenticatedRequest(path, options = {}) {

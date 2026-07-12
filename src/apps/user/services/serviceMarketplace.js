@@ -1,8 +1,12 @@
-import { apiRequest } from './api';
+import { apiRequest, getUploadUrl } from './api';
 import { authenticatedRequest } from './auth';
 
-export function getServiceCatalog() {
-  return apiRequest('/services/catalog');
+export async function getServiceCatalog() {
+  const catalog = await apiRequest('/services/catalog');
+  return (catalog || []).map((category) => ({
+    ...category,
+    imageUrl: getUploadUrl('services', category.image),
+  }));
 }
 
 export function getServiceProviders({ categoryId, page = 1, limit = 10 } = {}) {

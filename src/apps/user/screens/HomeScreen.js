@@ -549,7 +549,10 @@ export default function HomeScreen({ navigation }) {
             {promotionalOffers.map((offer) => (
               <TouchableOpacity
                 key={offer.id}
-                style={[styles.offerCard, { backgroundColor: offer.color || Colors.primary }]}
+                style={[
+                  styles.offerCard,
+                  { backgroundColor: offer.imageUrl ? Colors.gray100 : (offer.color || Colors.primary) },
+                ]}
                 activeOpacity={0.88}
               >
                 {offer.imageUrl ? (
@@ -1130,7 +1133,7 @@ const styles = StyleSheet.create({
   },
   offerImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.42)',
+    backgroundColor: 'rgba(0,0,0,0.20)',
   },
   offerIconBadge: {
     width: 32,
@@ -1147,8 +1150,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
   offerIconText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
-  offerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.white },
-  offerSub: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  offerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: Colors.white, textShadowColor: 'rgba(0,0,0,0.65)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  offerSub: { fontSize: FontSize.xs, color: Colors.white, marginTop: 4, textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   offerCode: {
     marginTop: 7,
     color: Colors.white,

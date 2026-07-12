@@ -14,11 +14,14 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import CartIconButton from '../components/CartIconButton';
+import { useCartCount } from '../context/CartContext';
 import { addCartItem } from '../services/cart';
 import { getProduct, getProducts } from '../services/products';
 import { createProductReview, getProductReviews } from '../services/reviews';
 
 export default function ProductDetailScreen({ route, navigation }) {
+  const { refreshCartCount } = useCartCount();
   const productId = route.params?.productId || route.params?.product?.id;
   const [product, setProduct] = useState(route.params?.product || null);
   const [loading, setLoading] = useState(Boolean(productId));
@@ -104,6 +107,7 @@ export default function ProductDetailScreen({ route, navigation }) {
         sizeId: selectedVariant ? undefined : selectedSize?.id,
         quantity,
       });
+      await refreshCartCount();
       navigation.navigate('MainTabs', { screen: 'Cart' });
     } catch (addError) {
       Alert.alert('Could not add to cart', addError?.message || 'Please try again');
@@ -157,13 +161,7 @@ export default function ProductDetailScreen({ route, navigation }) {
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Product Details</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Cart' })}
-          style={styles.cartButton}
-          accessibilityLabel="Open cart"
-        >
-          <Feather name="shopping-bag" size={22} color={Colors.primary} />
-        </TouchableOpacity>
+        <CartIconButton navigation={navigation} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>

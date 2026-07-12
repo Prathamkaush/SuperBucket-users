@@ -7,6 +7,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   NativeModules,
@@ -23,6 +24,8 @@ import { getMyOrder, placeOrder, previewOrder } from '../services/orders';
 import { getSettings } from '../services/settings';
 import { getWallet } from '../services/wallet';
 import { createRazorpayOrder, verifyRazorpayPayment } from '../services/payments';
+import { useCartCount } from '../context/CartContext';
+import { getAvailableCoupons } from '../services/coupons';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 const DAY_OPTIONS = [
@@ -33,6 +36,7 @@ const DAY_OPTIONS = [
 const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
 export default function CartScreen({ navigation }) {
+  const { setCount: setGlobalCartCount } = useCartCount();
   const [items, setItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
@@ -46,18 +50,26 @@ export default function CartScreen({ navigation }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [statusDialog, setStatusDialog] = useState(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponPreview, setCouponPreview] = useState(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
 
   const loadCart = useCallback(async () => {
     try {
-      const [cartItems, savedAddresses, settings, walletData] = await Promise.all([
+      const [cartItems, savedAddresses, settings, walletData, coupons] = await Promise.all([
         getCart(),
         getAddresses().catch(() => []),
         getSettings().catch(() => ({})),
         getWallet().catch(() => null),
+        getAvailableCoupons().catch(() => []),
       ]);
       setItems(cartItems);
+      setGlobalCartCount(cartItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0));
       setAddresses(savedAddresses);
       setWalletBalance(Number(walletData?.wallet?.balance || 0));
+      setAvailableCoupons(Array.isArray(coupons) ? coupons : []);
       const times = Array.isArray(settings.deliverySlotTimes) && settings.deliverySlotTimes.length
         ? settings.deliverySlotTimes
         : DEFAULT_SLOT_TIMES;
@@ -72,7 +84,7 @@ export default function CartScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setGlobalCartCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -96,6 +108,9 @@ export default function CartScreen({ navigation }) {
           ),
         );
       }
+      setGlobalCartCount((current) => Math.max(0, current + nextQuantity - item.quantity));
+      setAppliedCoupon(null);
+      setCouponPreview(null);
     } catch (error) {
       Alert.alert('Could not update cart', error?.message || 'Please try again');
     } finally {
@@ -118,8 +133,32 @@ export default function CartScreen({ navigation }) {
   );
   const total = totals.subtotal + totals.gst;
   const selectedAddress = addresses.find((address) => address.id === selectedAddressId);
+  const payableTotal = Number(couponPreview?.pricing?.payable ?? total);
+  const couponDiscount = Number(couponPreview?.pricing?.couponDiscount || 0);
+
+  const applyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return Alert.alert('Enter coupon', 'Enter a coupon code first.');
+    if (!selectedAddressId) return Alert.alert('Select address', 'Select a delivery address before applying a coupon.');
+    try {
+      setApplyingCoupon(true);
+      const preview = await previewOrder({ addressId: selectedAddressId, paymentMethod, couponCode: code });
+      setAppliedCoupon(preview.appliedCoupon || code);
+      setCouponPreview(preview);
+      setCouponInput(code);
+      Alert.alert('Coupon applied', `You saved ${money(preview.pricing?.couponDiscount || 0)}.`);
+    } catch (error) {
+      setAppliedCoupon(null);
+      setCouponPreview(null);
+      Alert.alert('Coupon not applied', error?.message || 'This coupon is not valid for your cart.');
+    } finally { setApplyingCoupon(false); }
+  };
 
   const showOrderSuccess = async (order) => {
+    setItems([]);
+    setGlobalCartCount(0);
+    setAppliedCoupon(null);
+    setCouponPreview(null);
     const orderWithOtp = order.deliveryOtp || !order.orderId
       ? order
       : await getMyOrder(order.orderId).catch(() => order);
@@ -166,8 +205,9 @@ export default function CartScreen({ navigation }) {
         const preview = await previewOrder({
           addressId: selectedAddressId,
           paymentMethod: 'RAZORPAY',
+          couponCode: appliedCoupon,
         });
-        const payable = Number(preview?.pricing?.payable || total);
+        const payable = Number(preview?.pricing?.payable ?? total);
         const razorpayOrder = await createRazorpayOrder(payable);
         const payment = await RazorpayCheckout.open({
           key: razorpayOrder.key,
@@ -190,13 +230,14 @@ export default function CartScreen({ navigation }) {
           deliveryMode,
           scheduledDeliveryAt: scheduled?.date.toISOString(),
           deliverySlotLabel: scheduled?.label,
+          couponCode: appliedCoupon,
         });
 
         await showOrderSuccess(order);
         return;
       }
 
-      if (paymentMethod === 'WALLET' && walletBalance < total) {
+      if (paymentMethod === 'WALLET' && walletBalance < payableTotal) {
         Alert.alert(
           'Insufficient wallet balance',
           `Your wallet has ${money(walletBalance)}. Please add money or choose another payment method.`,
@@ -210,6 +251,7 @@ export default function CartScreen({ navigation }) {
         deliveryMode,
         scheduledDeliveryAt: scheduled?.date.toISOString(),
         deliverySlotLabel: scheduled?.label,
+        couponCode: appliedCoupon,
       });
       await showOrderSuccess(order);
     } catch (error) {
@@ -405,6 +447,18 @@ export default function CartScreen({ navigation }) {
             </View>
 
             <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Coupon</Text>
+              <View style={styles.couponCard}>
+                <View style={styles.couponRow}>
+                  <TextInput value={couponInput} onChangeText={(value) => { setCouponInput(value.toUpperCase()); if (appliedCoupon) { setAppliedCoupon(null); setCouponPreview(null); } }} placeholder="Enter coupon code" placeholderTextColor={Colors.textMuted} autoCapitalize="characters" style={styles.couponInput} />
+                  <TouchableOpacity disabled={applyingCoupon} onPress={applyCoupon} style={styles.couponButton}><Text style={styles.couponButtonText}>{applyingCoupon ? 'CHECKING' : 'APPLY'}</Text></TouchableOpacity>
+                </View>
+                {appliedCoupon ? <View style={styles.appliedRow}><Text style={styles.appliedText}>✓ {appliedCoupon} applied</Text><TouchableOpacity onPress={() => { setAppliedCoupon(null); setCouponPreview(null); setCouponInput(''); }}><Text style={styles.removeCoupon}>REMOVE</Text></TouchableOpacity></View> : null}
+                {!appliedCoupon && availableCoupons.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.couponList}>{availableCoupons.map((coupon) => <TouchableOpacity key={coupon.code} onPress={() => setCouponInput(coupon.code)} style={styles.couponChip}><Text style={styles.couponChipCode}>{coupon.code}</Text><Text style={styles.couponChipText}>{coupon.description}</Text></TouchableOpacity>)}</ScrollView> : null}
+              </View>
+            </View>
+
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>Bill Summary</Text>
               <View style={styles.billCard}>
                 <View style={styles.billRow}>
@@ -417,6 +471,7 @@ export default function CartScreen({ navigation }) {
                     <Text style={styles.billValue}>{money(totals.gst)}</Text>
                   </View>
                 ) : null}
+                {couponDiscount > 0 ? <View style={styles.billRow}><Text style={styles.billLabel}>Coupon discount</Text><Text style={styles.discountText}>- {money(couponDiscount)}</Text></View> : null}
                 <View style={styles.billRow}>
                   <Text style={styles.billLabel}>Delivery</Text>
                   <Text style={styles.deliveryText}>Calculated at checkout</Text>
@@ -437,7 +492,7 @@ export default function CartScreen({ navigation }) {
                 </View>
                 <View style={[styles.billRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>Cart total</Text>
-                  <Text style={styles.totalValue}>{money(total)}</Text>
+                  <Text style={styles.totalValue}>{money(payableTotal)}</Text>
                 </View>
               </View>
             </View>
@@ -447,7 +502,7 @@ export default function CartScreen({ navigation }) {
               <View style={styles.paymentRow}>
                 <TouchableOpacity
                   style={[styles.paymentCard, paymentMethod === 'COD' && styles.paymentCardActive]}
-                  onPress={() => setPaymentMethod('COD')}
+                  onPress={() => { setPaymentMethod('COD'); setAppliedCoupon(null); setCouponPreview(null); }}
                   activeOpacity={0.82}
                 >
                   <Text style={styles.paymentTitle}>Cash on delivery</Text>
@@ -455,7 +510,7 @@ export default function CartScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.paymentCard, paymentMethod === 'RAZORPAY' && styles.paymentCardActive]}
-                  onPress={() => setPaymentMethod('RAZORPAY')}
+                  onPress={() => { setPaymentMethod('RAZORPAY'); setAppliedCoupon(null); setCouponPreview(null); }}
                   activeOpacity={0.82}
                 >
                   <Text style={styles.paymentTitle}>Online</Text>
@@ -463,7 +518,7 @@ export default function CartScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.paymentCard, paymentMethod === 'WALLET' && styles.paymentCardActive]}
-                  onPress={() => setPaymentMethod('WALLET')}
+                  onPress={() => { setPaymentMethod('WALLET'); setAppliedCoupon(null); setCouponPreview(null); }}
                   activeOpacity={0.82}
                 >
                   <Text style={styles.paymentTitle}>Wallet Pay</Text>
@@ -475,8 +530,8 @@ export default function CartScreen({ navigation }) {
 
           <View style={styles.footer}>
             <View>
-              <Text style={styles.footerTotal}>{money(total)}</Text>
-              <Text style={styles.footerSub}>Before delivery charges</Text>
+              <Text style={styles.footerTotal}>{money(payableTotal)}</Text>
+              <Text style={styles.footerSub}>{couponPreview ? 'Including delivery and coupon' : 'Before delivery charges'}</Text>
             </View>
             <TouchableOpacity
               style={[styles.checkoutButton, placing && styles.checkoutDisabled]}
@@ -553,6 +608,19 @@ const styles = StyleSheet.create({
   itemCount: { color: Colors.textMuted, fontSize: FontSize.sm },
   content: { paddingBottom: 130 },
   section: { marginTop: 16, paddingHorizontal: Spacing.lg },
+  couponCard: { padding: 14, borderRadius: Radius.md, backgroundColor: Colors.white, ...Shadow.sm },
+  couponRow: { flexDirection: 'row', gap: 10 },
+  couponInput: { flex: 1, minHeight: 46, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: 13, color: Colors.textPrimary, fontWeight: '800' },
+  couponButton: { minWidth: 82, minHeight: 46, borderRadius: Radius.md, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  couponButtonText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
+  appliedRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 11 },
+  appliedText: { color: Colors.success, fontSize: FontSize.xs, fontWeight: '800' },
+  couponList: { marginTop: 12 },
+  couponChip: { maxWidth: 190, marginRight: 9, paddingHorizontal: 11, paddingVertical: 9, borderRadius: Radius.sm, backgroundColor: Colors.primaryLight, borderWidth: 1, borderColor: Colors.primary },
+  couponChipCode: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
+  couponChipText: { color: Colors.textSecondary, fontSize: 9, marginTop: 2 },
+  removeCoupon: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' },
+  discountText: { color: Colors.success, fontWeight: '800' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   sectionTitle: { marginBottom: 10, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '700' },
   linkText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '800' },

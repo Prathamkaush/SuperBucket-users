@@ -20,6 +20,7 @@ import {
   sendPhoneOtp,
   verifyPhoneOtp,
 } from '../services/auth';
+import { getAddresses } from '../services/addresses';
 
 const OTP_LENGTH = 4;
 
@@ -33,6 +34,15 @@ function getGoogleSignInModule() {
 
 export default function LoginScreen({ navigation }) {
   const otpInputRefs = useRef([]);
+
+  const continueAfterLogin = async () => {
+    try {
+      const addresses = await getAddresses();
+      navigation.replace(Array.isArray(addresses) && addresses.length ? 'MainTabs' : 'Location');
+    } catch {
+      navigation.replace('MainTabs');
+    }
+  };
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
@@ -119,7 +129,7 @@ export default function LoginScreen({ navigation }) {
     try {
       setOtpLoading(true);
       await verifyPhoneOtp(challengeToken, code);
-      navigation.replace('Location');
+      await continueAfterLogin();
     } catch (error) {
       Alert.alert('OTP verification failed', error?.message || 'Please try again');
     } finally {
@@ -182,7 +192,7 @@ export default function LoginScreen({ navigation }) {
       }
 
       await exchangeGoogleIdToken(idToken);
-      navigation.replace('Location');
+      await continueAfterLogin();
     } catch (error) {
       const {
         isCancelledResponse,

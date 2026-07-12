@@ -13,12 +13,13 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import { submitBusinessAd } from '../services/homeOffers';
 
 export default function AdvertiseBusinessScreen({ navigation }) {
-  const [posterUrl, setPosterUrl] = useState('');
+  const [posterImage, setPosterImage] = useState(null);
   const [businessName, setBusinessName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -26,6 +27,21 @@ export default function AdvertiseBusinessScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [offer, setOffer] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const pickPoster = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Photo permission needed', 'Allow photo access to upload your shop image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets?.[0]) setPosterImage(result.assets[0]);
+  };
 
   const submitAd = async () => {
     if (!businessName.trim() || !description.trim() || !address.trim() || !phone.trim()) {
@@ -46,7 +62,13 @@ export default function AdvertiseBusinessScreen({ navigation }) {
         address: address.trim(),
         phone: phone.trim(),
         offer: offer.trim() || undefined,
-        posterUrl: posterUrl.trim() || undefined,
+        ...(posterImage ? {
+          image: {
+            uri: posterImage.uri,
+            name: posterImage.fileName || `business-poster-${Date.now()}.jpg`,
+            type: posterImage.mimeType || 'image/jpeg',
+          },
+        } : {}),
       });
 
       Alert.alert(
@@ -81,28 +103,24 @@ export default function AdvertiseBusinessScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.posterCard}>
-          {posterUrl.trim() ? (
-            <Image source={{ uri: posterUrl.trim() }} style={styles.posterImage} />
+          {posterImage?.uri ? (
+            <Image source={{ uri: posterImage.uri }} style={styles.posterImage} />
           ) : (
             <View style={styles.posterEmpty}>
               <Feather name="image" size={34} color={Colors.primary} />
               <Text style={styles.posterTitle}>Business poster</Text>
-              <Text style={styles.posterSub}>Paste an image URL below for now.</Text>
+              <Text style={styles.posterSub}>Upload a clear photo of your shop.</Text>
             </View>
           )}
         </View>
 
         <View style={styles.card}>
           <View style={styles.field}>
-            <Text style={styles.label}>Poster image URL</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="https://example.com/pizza-shop.jpg"
-              placeholderTextColor={Colors.textMuted}
-              value={posterUrl}
-              onChangeText={setPosterUrl}
-              autoCapitalize="none"
-            />
+            <Text style={styles.label}>Shop image</Text>
+            <TouchableOpacity style={styles.imageButton} onPress={pickPoster} activeOpacity={0.8}>
+              <Feather name="upload" size={18} color={Colors.primary} />
+              <Text style={styles.imageButtonText}>{posterImage ? 'CHANGE IMAGE' : 'UPLOAD IMAGE'}</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.field}>
@@ -246,6 +264,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   textArea: { minHeight: 104 },
+  imageButton: {
+    minHeight: 48,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  imageButtonText: { color: Colors.primary, fontSize: FontSize.sm, fontWeight: '900' },
   submitButton: {
     minHeight: 54,
     borderRadius: Radius.md,

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import CartIconButton from '../components/CartIconButton';
 
 const CATEGORIES = ['All', 'Rice & Atta', 'Oils', 'Snacks', 'Cleaning', 'Personal Care', 'Beverages', 'Dairy'];
 const PRODUCTS = [
@@ -66,12 +67,7 @@ export default function GroceryScreen({ navigation }) {
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle}>Groceries</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Cart')} style={{ position: 'relative', padding: 4 }}>
-          <Text style={{ fontSize: 24 }}>🛒</Text>
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cartCount}</Text></View>
-          )}
-        </TouchableOpacity>
+        <CartIconButton navigation={navigation} />
       </View>
 
       <View style={styles.searchContainer}>

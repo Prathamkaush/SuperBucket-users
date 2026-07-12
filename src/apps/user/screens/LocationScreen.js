@@ -321,6 +321,7 @@ export default function LocationScreen({ navigation, route }) {
 
     try {
       setSaving(true);
+      const isFirstAddress = !addressId && addresses.length === 0;
       const addressData = {
         name: form.name.trim(),
         phone: form.phone,
@@ -342,6 +343,11 @@ export default function LocationScreen({ navigation, route }) {
 
       if (route?.params?.returnToCart) {
         navigation.navigate('MainTabs', { screen: 'Cart' });
+      } else if (isFirstAddress) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+        });
       } else {
         setAddresses(await getAddresses());
         setShowForm(false);
@@ -360,7 +366,7 @@ export default function LocationScreen({ navigation, route }) {
         <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
         <View style={styles.header}>
           <View style={styles.headerRow}>
-            <BackButton onPress={() => navigation.goBack()} />
+            <BackButton onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.replace('MainTabs', { screen: 'Home' })} />
             <Text style={styles.headerTitle}>Saved Addresses</Text>
           </View>
         </View>
@@ -415,7 +421,11 @@ export default function LocationScreen({ navigation, route }) {
       <StatusBar barStyle="dark-content" backgroundColor={Colors.primaryLight} />
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <BackButton onPress={() => addresses.length && !route?.params?.returnToCart ? setShowForm(false) : navigation.goBack()} />
+          <BackButton onPress={() => {
+            if (addresses.length && !route?.params?.returnToCart) return setShowForm(false);
+            if (navigation.canGoBack()) return navigation.goBack();
+            navigation.replace('MainTabs', { screen: 'Home' });
+          }} />
           <Text style={styles.headerTitle}>{addressId ? 'Edit Address' : 'Add Address'}</Text>
         </View>
 

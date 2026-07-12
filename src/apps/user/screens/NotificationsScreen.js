@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   Image,
+  PanResponder,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -14,6 +17,7 @@ import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
 import {
   getNotifications,
+  deleteNotification,
   markAllNotificationsRead,
   markNotificationRead,
 } from '../services/notifications';
@@ -58,6 +62,24 @@ export default function NotificationsScreen({ navigation }) {
       setUnreadCount((value) => Math.max(0, value - 1));
       markNotificationRead(notif.id).catch(() => undefined);
     }
+  };
+
+  const removeNotification = (notif) => {
+    Alert.alert('Delete notification?', 'This notification will be removed from your inbox.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          setNotifs((items) => items.filter((item) => item.id !== notif.id));
+          if (!notif.readAt) setUnreadCount((value) => Math.max(0, value - 1));
+          try {
+            await deleteNotification(notif.id);
+          } catch (e) {
+            Alert.alert('Could not delete notification', e.message || 'Please try again.');
+            load(true);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -123,7 +145,7 @@ export default function NotificationsScreen({ navigation }) {
           const unread = !notif.readAt;
           const accent = accentForType(notif.type);
           return (
-            <TouchableOpacity
+            <SwipeDeleteNotification
               key={notif.id}
               style={[
                 styles.notifCard,
@@ -132,6 +154,7 @@ export default function NotificationsScreen({ navigation }) {
               ]}
               activeOpacity={0.8}
               onPress={() => openNotification(notif)}
+              onDelete={() => removeNotification(notif)}
             >
               <View style={[styles.notifIconWrap, { backgroundColor: `${accent}18` }]}>
                 <Text style={[styles.notifIcon, { color: accent }]}>{iconForType(notif.type)}</Text>
@@ -150,10 +173,32 @@ export default function NotificationsScreen({ navigation }) {
                 ) : null}
                 <Text style={styles.notifTime}>{formatTime(notif.createdAt)}</Text>
               </View>
-            </TouchableOpacity>
+            </SwipeDeleteNotification>
           );
         })}
       </ScrollView>
+    </View>
+  );
+}
+
+function SwipeDeleteNotification({ children, style, onPress, onDelete }) {
+  const translateX = React.useRef(new Animated.Value(0)).current;
+  const panResponder = React.useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => gesture.dx > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderMove: (_event, gesture) => translateX.setValue(Math.min(gesture.dx, 120)),
+    onPanResponderRelease: (_event, gesture) => {
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      if (gesture.dx >= 95) onDelete();
+    },
+    onPanResponderTerminate: () => Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start(),
+  }), [onDelete, translateX]);
+
+  return (
+    <View style={styles.swipeWrap}>
+      <View style={styles.swipeDelete}><Text style={styles.swipeDeleteText}>DELETE</Text></View>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        <TouchableOpacity style={style} activeOpacity={0.8} onPress={onPress}>{children}</TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
@@ -243,6 +288,17 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     backgroundColor: '#FDFCFC',
   },
+  swipeWrap: { overflow: 'hidden' },
+  swipeDelete: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    paddingLeft: Spacing.xl,
+    marginHorizontal: Spacing.lg,
+    marginBottom: 10,
+    borderRadius: Radius.lg,
+  },
+  swipeDeleteText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   notifIconWrap: {
     width: 52,
     height: 52,

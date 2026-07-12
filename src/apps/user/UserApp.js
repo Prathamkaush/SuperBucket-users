@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BriefcaseBusiness,
@@ -13,7 +14,6 @@ import {
   MapPinned,
   Plus,
   ShoppingBag,
-  ShoppingCart,
   UserRound,
   WalletCards,
 } from 'lucide-react-native';
@@ -52,12 +52,14 @@ import ProviderLoginScreen from '../provider/screens/LoginScreen';
 import ProviderOnboardingScreen from '../provider/screens/OnboardingScreen';
 import ProviderDashboardScreen from '../provider/screens/DashboardScreen';
 import ProviderJobsScreen from '../provider/screens/JobsScreen';
+import ProviderJobDetailScreen from '../provider/screens/JobDetailScreen';
 import ProviderEarningsScreen from '../provider/screens/EarningsScreen';
 import ProviderProfileScreen from '../provider/screens/ProfileScreen';
 import { getToken as getProviderToken } from '../provider/services/auth';
 import { getProfile as getProviderProfile } from '../provider/services/provider';
 
 import { Colors } from './theme/theme';
+import { CartProvider, useCartCount } from './context/CartContext';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -89,8 +91,11 @@ function TabIcon({ Icon, focused }) {
 }
 
 function MainTabs() {
+  const { count, refreshCartCount } = useCartCount();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 8);
+
+  React.useEffect(() => { refreshCartCount(); }, [refreshCartCount]);
 
   return (
     <Tab.Navigator
@@ -132,12 +137,9 @@ function MainTabs() {
           tabBarIcon: ({ focused }) => (
             <View style={tabStyles.cartIconWrap}>
               <View style={[tabStyles.cartBubble, focused && tabStyles.cartBubbleFocused]}>
-                <ShoppingCart
-                  size={23}
-                  color={focused ? Colors.white : Colors.gray600}
-                  strokeWidth={2.5}
-                />
+                <Feather name="shopping-cart" size={22} color={focused ? Colors.white : Colors.gray600} />
               </View>
+              {count > 0 ? <View style={tabStyles.cartCountBadge}><Text style={tabStyles.cartCountText}>{count > 99 ? '99+' : count}</Text></View> : null}
             </View>
           ),
           tabBarLabel: ({ focused }) => (
@@ -292,13 +294,14 @@ function ProviderPortal() {
       <ProviderStack.Screen name="Login" component={ProviderLoginScreen} />
       <ProviderStack.Screen name="Onboarding" component={ProviderOnboardingScreen} />
       <ProviderStack.Screen name="ProviderTabs" component={ProviderTabs} />
+      <ProviderStack.Screen name="JobDetail" component={ProviderJobDetailScreen} />
     </ProviderStack.Navigator>
   );
 }
 
 export default function UserApp() {
   return (
-    <NavigationContainer>
+    <CartProvider><NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Splash"        component={SplashScreen} />
         <Stack.Screen name="Login"         component={LoginScreen} />
@@ -323,7 +326,7 @@ export default function UserApp() {
         <Stack.Screen name="RenterPortal"  component={RenterPortal} />
         <Stack.Screen name="ProviderPortal" component={ProviderPortal} />
       </Stack.Navigator>
-    </NavigationContainer>
+    </NavigationContainer></CartProvider>
   );
 }
 
@@ -374,6 +377,8 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: -18,
   },
+  cartCountBadge: { position: 'absolute', top: -6, right: -8, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: Colors.primary, borderWidth: 2, borderColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
+  cartCountText: { color: Colors.white, fontSize: 8, fontWeight: '900' },
   cartBubble: {
     width: 52,
     height: 52,

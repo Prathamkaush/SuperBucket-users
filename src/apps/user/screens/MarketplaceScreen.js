@@ -15,6 +15,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import BackButton from '../components/BackButton';
+import CartIconButton from '../components/CartIconButton';
 import { getProducts, getProductTypes } from '../services/products';
 import { getCategories } from '../services/categories';
 
@@ -252,12 +253,7 @@ export default function MarketplaceScreen({ navigation, route }) {
             {loading ? 'Loading...' : `${products.length} products`}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.cartButton}
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Cart' })}
-        >
-          <Feather name="shopping-cart" size={20} color={Colors.primary} />
-        </TouchableOpacity>
+        <CartIconButton navigation={navigation} />
       </View>
 
       <View style={styles.searchBox}>

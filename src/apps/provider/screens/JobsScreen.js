@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Feather } from '@expo/vector-icons';
 import { acceptJob, getAvailableJobs, getMyJobs, requestRevisit, updateJob } from '../services/provider';
 import { Colors, card } from '../theme';
 
@@ -19,7 +20,7 @@ const nextAction = {
   EN_ROUTE: ['IN_PROGRESS', 'Start work'],
 };
 
-export default function JobsScreen() {
+export default function JobsScreen({ navigation }) {
   const [tab, setTab] = useState('available');
   const [available, setAvailable] = useState([]);
   const [mine, setMine] = useState([]);
@@ -97,6 +98,10 @@ export default function JobsScreen() {
                 </TouchableOpacity>
               ) : (
                 <>
+                  <TouchableOpacity style={styles.detailsButton} onPress={() => navigation.getParent()?.navigate('JobDetail', { jobId: job.id, job })}>
+                    <Text style={styles.detailsText}>View customer & location details</Text>
+                    <Feather name="chevron-right" size={17} color={Colors.secondary} />
+                  </TouchableOpacity>
                   <Text style={styles.status}>{job.status.replace(/_/g, ' ')}</Text>
                   {job.revisitReason ? (
                     <View style={styles.revisitBox}>
@@ -173,6 +178,8 @@ const styles = StyleSheet.create({
   address: { color: Colors.muted, lineHeight: 18, marginTop: 5 },
   note: { backgroundColor: Colors.warningLight, borderRadius: 8, padding: 9, marginTop: 8 },
   status: { fontWeight: '900', color: Colors.secondary, marginTop: 12 },
+  detailsButton: { marginTop: 11, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: Colors.secondaryLight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  detailsText: { color: Colors.secondary, fontWeight: '900', fontSize: 12 },
   primary: { backgroundColor: Colors.primary, padding: 13, borderRadius: 10, alignItems: 'center', marginTop: 12 },
   complete: { backgroundColor: Colors.success, padding: 13, borderRadius: 10, alignItems: 'center', marginTop: 8 },
   primaryText: { color: Colors.white, fontWeight: '900' },

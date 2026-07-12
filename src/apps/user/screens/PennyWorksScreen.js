@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -103,7 +104,7 @@ export default function PennyWorksScreen({ navigation, route }) {
                   const active = selectedCategory?.id === category.id;
                   return (
                     <TouchableOpacity key={category.id} style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={() => setSelectedId(active ? null : category.id)}>
-                      <Text style={styles.categoryIcon}>{category.icon || category.name.charAt(0)}</Text>
+                      {category.imageUrl ? <Image source={{ uri: category.imageUrl }} style={styles.categoryImage} resizeMode="cover" /> : <Text style={styles.categoryIcon}>{category.icon || category.name.charAt(0)}</Text>}
                       <Text style={[styles.categoryName, active && styles.categoryNameActive]} numberOfLines={2}>{category.name}</Text>
                     </TouchableOpacity>
                   );
@@ -118,7 +119,7 @@ export default function PennyWorksScreen({ navigation, route }) {
             const category = selectedCategory || item.category;
             return (
               <TouchableOpacity style={styles.serviceCard} activeOpacity={0.86} onPress={() => openService(item, category)}>
-                <View style={styles.serviceIcon}><Feather name="tool" size={22} color={Colors.primary} /></View>
+                <View style={styles.serviceIcon}>{category?.imageUrl ? <Image source={{ uri: category.imageUrl }} style={styles.serviceImage} resizeMode="cover" /> : <Feather name="tool" size={22} color={Colors.primary} />}</View>
                 <View style={styles.serviceCopy}>
                   <Text style={styles.serviceName}>{item.name}</Text>
                   <Text style={styles.serviceDescription} numberOfLines={2}>{item.description || category?.description || 'Professional home service'}</Text>
@@ -149,6 +150,8 @@ const styles = StyleSheet.create({
   searchBox: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white, paddingHorizontal: 13 }, searchInput: { flex: 1, paddingVertical: 12, color: Colors.textPrimary },
   sectionHeader: { marginTop: 24, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' }, viewAll: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800' },
   categoryRow: { gap: 10, paddingBottom: 4 }, categoryCard: { width: 88, minHeight: 90, alignItems: 'center', justifyContent: 'center', padding: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white }, categoryCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight }, categoryIcon: { color: Colors.primary, fontSize: 25, fontWeight: '900' }, categoryName: { marginTop: 7, color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '800', textAlign: 'center' }, categoryNameActive: { color: Colors.primary },
+  categoryImage: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.gray100 },
   servicesTitle: { marginTop: 25, marginBottom: 12, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
   serviceCard: { marginBottom: 11, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.md, backgroundColor: Colors.white, ...Shadow.sm }, serviceIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight }, serviceCopy: { flex: 1 }, serviceName: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' }, serviceDescription: { marginTop: 3, color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 16 }, serviceMeta: { marginTop: 5, color: Colors.textMuted, fontSize: 10 }, priceBox: { alignItems: 'flex-end' }, price: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' }, book: { marginTop: 6, color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' }, empty: { padding: 30, textAlign: 'center', color: Colors.textMuted },
+  serviceImage: { width: '100%', height: '100%', borderRadius: 24 },
 });
