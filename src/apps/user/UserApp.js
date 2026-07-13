@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
@@ -41,6 +41,7 @@ import ProfileScreen     from './screens/ProfileScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ContactSupportScreen from './screens/ContactSupportScreen';
 import AdvertiseBusinessScreen from './screens/AdvertiseBusinessScreen';
+import MyBusinessAdsScreen from './screens/MyBusinessAdsScreen';
 import RenterDashboardScreen from '../renter/screens/RenterDashboardScreen';
 import RenterListingsScreen from '../renter/screens/RenterListingsScreen';
 import AddSpaceScreen from '../renter/screens/AddSpaceScreen';
@@ -68,13 +69,18 @@ const RenterTab = createBottomTabNavigator();
 const ProviderStack = createNativeStackNavigator();
 const ProviderTab = createBottomTabNavigator();
 
-const TAB_ITEMS = [
-  { name: 'Home',    icon: '🏠',  label: 'Home'    },
-  { name: 'Grocery', icon: '🛒',  label: 'Grocery' },
-  { name: 'Cart',    icon: '🛍️', label: 'Cart'    },
-  { name: 'Wallet',  icon: '💰',  label: 'Wallet'  },
-  { name: 'Profile', icon: '👤',  label: 'Profile' },
-];
+const navigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.primary,
+    background: Colors.background,
+    card: Colors.white,
+    text: Colors.textPrimary,
+    border: Colors.border,
+    notification: Colors.primary,
+  },
+};
 
 function TabIcon({ Icon, focused }) {
   return (
@@ -99,8 +105,10 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: [
           tabStyles.tabBar,
           {
@@ -199,8 +207,10 @@ function MiniTabIcon({ Icon, focused }) {
 function RenterTabs() {
   return (
     <RenterTab.Navigator
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.gray500,
         tabBarStyle: tabStyles.innerTabBar,
@@ -225,7 +235,7 @@ function RenterTabs() {
 
 function RenterPortal() {
   return (
-    <RenterStack.Navigator screenOptions={{ headerShown: false }}>
+    <RenterStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: Colors.background } }}>
       <RenterStack.Screen name="RenterTabs" component={RenterTabs} />
       <RenterStack.Screen name="SpaceDetail" component={SpaceDetailScreen} />
       <RenterStack.Screen name="BankDetails" component={BankDetailsScreen} />
@@ -236,8 +246,10 @@ function RenterPortal() {
 function ProviderTabs() {
   return (
     <ProviderTab.Navigator
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.gray500,
         tabBarStyle: tabStyles.innerTabBar,
@@ -289,7 +301,7 @@ function ProviderGate({ navigation }) {
 
 function ProviderPortal() {
   return (
-    <ProviderStack.Navigator screenOptions={{ headerShown: false }}>
+    <ProviderStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: Colors.background } }}>
       <ProviderStack.Screen name="ProviderGate" component={ProviderGate} />
       <ProviderStack.Screen name="Login" component={ProviderLoginScreen} />
       <ProviderStack.Screen name="Onboarding" component={ProviderOnboardingScreen} />
@@ -301,12 +313,20 @@ function ProviderPortal() {
 
 export default function UserApp() {
   return (
-    <CartProvider><NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Splash"        component={SplashScreen} />
-        <Stack.Screen name="Login"         component={LoginScreen} />
+    <CartProvider><NavigationContainer theme={navigationTheme}>
+      <Stack.Navigator
+        initialRouteName="Splash"
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+          contentStyle: { backgroundColor: Colors.background },
+        }}
+      >
+        <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="Location"      component={LocationScreen} />
-        <Stack.Screen name="MainTabs"      component={MainTabs} />
+        <Stack.Screen name="MainTabs" component={MainTabs} options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="Parcel"        component={ParcelScreen} />
         <Stack.Screen name="PrintDeliver"  component={PrintDeliverScreen} />
         <Stack.Screen name="PennyWorks"    component={PennyWorksScreen} />
@@ -323,6 +343,7 @@ export default function UserApp() {
         <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
         <Stack.Screen name="ContactSupport" component={ContactSupportScreen} />
         <Stack.Screen name="AdvertiseBusiness" component={AdvertiseBusinessScreen} />
+        <Stack.Screen name="MyBusinessAds" component={MyBusinessAdsScreen} />
         <Stack.Screen name="RenterPortal"  component={RenterPortal} />
         <Stack.Screen name="ProviderPortal" component={ProviderPortal} />
       </Stack.Navigator>

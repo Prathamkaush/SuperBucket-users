@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Dimensions, Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
+  ActivityIndicator, Alert, Dimensions, Image, Linking, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, StatusBar,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
@@ -16,7 +16,7 @@ import { getUploadUrl } from '../services/api';
 import { getWallet } from '../services/wallet';
 import { getNotifications } from '../services/notifications';
 import { getSettings } from '../services/settings';
-import { getHomeOffers } from '../services/homeOffers';
+import { getHomeOffers, registerBusinessAdClick } from '../services/homeOffers';
 import { getMyOrders, reorderOrder } from '../services/orders';
 
 const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
@@ -168,6 +168,7 @@ export default function HomeScreen({ navigation }) {
   const businessAds = useMemo(() => homeOffers.filter((offer) => offer.icon === 'business'), [homeOffers]);
   const promotionalOffers = useMemo(() => homeOffers.filter((offer) => offer.icon !== 'business'), [homeOffers]);
   const adCardWidth = Dimensions.get('window').width - (Spacing.lg * 2);
+  const compactHeader = Dimensions.get('window').width < 390;
 
   useEffect(() => {
     if (businessAds.length < 2) return undefined;
@@ -274,6 +275,12 @@ export default function HomeScreen({ navigation }) {
 
   const openTrending = (product) =>
     navigation.navigate('ProductDetail', { productId: product.id, product });
+  const openBusinessAd = (ad) => {
+    if (!ad.businessAdId) return;
+    registerBusinessAdClick(ad.businessAdId).catch(() => undefined);
+    const phone = String(ad.buttonLabel || '').replace(/\D/g, '');
+    if (phone) Linking.openURL(`tel:${phone}`).catch(() => undefined);
+  };
   const runSearch = async () => {
     const term = search.trim();
     if (!term) {
@@ -353,51 +360,86 @@ export default function HomeScreen({ navigation }) {
 
       {/* ─── Top Header ─── */}
       <View style={styles.topBar}>
-        <View style={styles.topLeft}>
-          <LogoBrand size="sm" />
-          <TouchableOpacity
-            style={styles.locationRow}
-            onPress={() => navigation.navigate('Location')}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.pinIcon}>📍</Text>
-            <Text style={styles.locationText} numberOfLines={1}>{locationLabel}</Text>
-            <Text style={styles.chevron}>▾</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.topRight}>
-          <TouchableOpacity style={styles.walletChip} onPress={() => navigation.navigate('Wallet')}>
-            <Text style={styles.walletText}>Rs {walletAmount}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Text style={styles.iconBtnText}>🔔</Text>
-            {unreadNotifications > 0 && (
-              <View style={styles.badge}><Text style={styles.badgeText}>{notificationBadge}</Text></View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.iconBtn, styles.profileBtn]}
-            onPress={() => navigation.navigate('Profile')}
-          >
-            <View style={styles.profileAvatar}>
-              {profileImageUrl ? (
-                <Image source={{ uri: profileImageUrl }} style={styles.profileAvatarImage} />
-              ) : (
-                <Text style={styles.profileAvatarText}>{profileInitial}</Text>
+        <View style={styles.headerMainRow}>
+          <LogoBrand size={compactHeader ? 'xs' : 'sm'} style={styles.headerLogo} />
+          <View style={styles.topRight}>
+            <TouchableOpacity
+              style={styles.walletChip}
+              onPress={() => navigation.navigate('Wallet')}
+              activeOpacity={0.78}
+              accessibilityLabel={`Wallet balance Rs ${walletAmount}`}
+            >
+              <View style={styles.walletIconWrap}>
+                <Feather name="credit-card" size={14} color={Colors.primary} />
+              </View>
+              <View>
+                {!compactHeader ? <Text style={styles.walletLabel}>Wallet</Text> : null}
+                <Text style={styles.walletText}>Rs {walletAmount}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.78}
+              accessibilityLabel="Notifications"
+            >
+              <Feather name="bell" size={19} color={Colors.textPrimary} />
+              {unreadNotifications > 0 && (
+                <View style={styles.badge}><Text style={styles.badgeText}>{notificationBadge}</Text></View>
               )}
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerIconButton, styles.profileBtn]}
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.78}
+              accessibilityLabel="Open profile"
+            >
+              <View style={styles.profileAvatar}>
+                {profileImageUrl ? (
+                  <Image source={{ uri: profileImageUrl }} style={styles.profileAvatarImage} />
+                ) : (
+                  <Text style={styles.profileAvatarText}>{profileInitial}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.locationRow}
+          onPress={() => navigation.navigate('Location')}
+          activeOpacity={0.78}
+          accessibilityLabel={`Delivery address ${locationLabel}`}
+        >
+          <View style={styles.locationIconWrap}>
+            <Feather name="map-pin" size={16} color={Colors.primary} />
+          </View>
+          <View style={styles.locationCopy}>
+            <Text style={styles.locationLabel}>DELIVERING TO</Text>
+            <Text style={styles.locationText} numberOfLines={1}>{locationLabel}</Text>
+          </View>
+          <View style={styles.locationChevron}>
+            <Feather name="chevron-down" size={16} color={Colors.textSecondary} />
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchWrapper}>
         <View style={styles.searchBar}>
-          <TouchableOpacity onPress={runSearch} disabled={searching}>
-            <Text style={styles.searchIcon}>Search</Text>
+          <TouchableOpacity
+            onPress={runSearch}
+            disabled={searching}
+            style={styles.searchIconButton}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Search"
+          >
+            {searching ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <Feather name="search" size={19} color={Colors.primary} />
+            )}
           </TouchableOpacity>
           <TextInput
             style={styles.searchInput}
@@ -409,8 +451,8 @@ export default function HomeScreen({ navigation }) {
             onSubmitEditing={runSearch}
           />
           {search ? (
-            <TouchableOpacity onPress={clearSearch} style={styles.searchClear}>
-              <Text style={styles.searchClearText}>x</Text>
+            <TouchableOpacity onPress={clearSearch} style={styles.searchClear} accessibilityLabel="Clear search">
+              <Feather name="x" size={15} color={Colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -505,7 +547,7 @@ export default function HomeScreen({ navigation }) {
               )}
             >
               {businessAds.map((ad) => (
-                <View key={ad.id} style={[styles.adHeroCard, { width: adCardWidth, backgroundColor: ad.color || '#0B63CE' }]}>
+                <TouchableOpacity key={ad.id} activeOpacity={ad.businessAdId ? 0.9 : 1} onPress={() => openBusinessAd(ad)} style={[styles.adHeroCard, { width: adCardWidth, backgroundColor: ad.color || '#0B63CE' }]}>
                   {ad.imageUrl ? <Image source={{ uri: ad.imageUrl }} style={styles.adHeroImage} resizeMode="cover" /> : null}
                   <View style={styles.adHeroOverlay} />
                   <View style={styles.sponsoredBadge}><Text style={styles.sponsoredText}>Sponsored</Text></View>
@@ -515,7 +557,7 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.adHeroSubtitle}>{ad.subtitle}</Text>
                     <View style={styles.adHeroAction}><Text style={styles.adHeroActionText}>{ad.buttonLabel || 'View offer'}</Text></View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </ScrollView>
             {businessAds.length > 1 ? (
@@ -579,8 +621,9 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Trending</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Marketplace')}>
+            <TouchableOpacity style={styles.sectionActionButton} onPress={() => navigation.navigate('Marketplace')}>
               <Text style={styles.sectionAction}>See all</Text>
+              <Feather name="arrow-up-right" size={13} color={Colors.primary} />
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -619,7 +662,9 @@ export default function HomeScreen({ navigation }) {
                   <Text style={[styles.trendingPrice, { color: Colors.primary }]}>
                     Rs {Number(product.price || 0).toLocaleString()}
                   </Text>
-                  <Text style={styles.trendingArrow}>›</Text>
+                  <View style={styles.cardArrowButton}>
+                    <Feather name="chevron-right" size={16} color={Colors.primary} />
+                  </View>
                 </View>
               </TouchableOpacity>
             ))}
@@ -630,12 +675,14 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Properties Near You</Text>
             <TouchableOpacity
+              style={styles.sectionActionButton}
               onPress={() => navigation.navigate('Rentals', {
                 nearbyOnly: true,
                 pincode: defaultAddress?.pincode,
               })}
             >
               <Text style={styles.sectionAction}>View all</Text>
+              <Feather name="arrow-up-right" size={13} color={Colors.primary} />
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -665,16 +712,16 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickRow}>
-            {QUICK_ACTIONS.map((action, idx) => (
+            {QUICK_ACTIONS.map((action) => (
               <TouchableOpacity
-                key={idx}
+                key={action.label}
                 style={[styles.quickCard, { backgroundColor: action.color }]}
                 activeOpacity={0.8}
                 disabled={action.action === 'reorder' && reordering}
                 onPress={() => runQuickAction(action)}
               >
-                <View style={styles.quickIcon}>
-                  <ActionIcon action={action} />
+                <View style={[styles.quickIcon, { borderColor: `${action.iconColor}20` }]}>
+                  <ActionIcon action={action} size={22} />
                 </View>
                 <Text style={styles.quickLabel}>{action.action === 'reorder' && reordering ? 'Adding...' : action.label}</Text>
               </TouchableOpacity>
@@ -788,8 +835,16 @@ function PropertyNearCard({ property, onPress }) {
         </View>
       </View>
       <Text style={styles.propertyNearTitle} numberOfLines={2}>{property.title}</Text>
-      <Text style={styles.propertyNearAddress} numberOfLines={1}>{property.address}</Text>
-      <Text style={styles.propertyNearPrice}>Rs {price}{property.mode === 'RENT' ? '/mo' : ''}</Text>
+      <View style={styles.propertyNearAddressRow}>
+        <Feather name="map-pin" size={11} color={Colors.textMuted} />
+        <Text style={styles.propertyNearAddress} numberOfLines={1}>{property.address || 'Location available'}</Text>
+      </View>
+      <View style={styles.propertyNearFooter}>
+        <Text style={styles.propertyNearPrice}>Rs {price}{property.mode === 'RENT' ? '/mo' : ''}</Text>
+        <View style={[styles.cardArrowButton, styles.propertyNearArrow]}>
+          <Feather name="chevron-right" size={16} color={Colors.secondary} />
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -864,88 +919,168 @@ const styles = StyleSheet.create({
   topBar: {
     backgroundColor: Colors.primaryLight,
     paddingTop: 50,
-    paddingBottom: 14,
+    paddingBottom: 12,
     paddingHorizontal: Spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     borderBottomWidth: 1,
     borderBottomColor: '#F7D6D9',
   },
-
-  topLeft: { flex: 1, marginRight: 8 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 3 },
-  pinIcon: { fontSize: 11 },
-  locationText: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-    flex: 1,
+  headerMainRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  chevron: { color: Colors.gray600, fontSize: 11 },
-  topRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerLogo: { marginLeft: 2 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   walletChip: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingLeft: 6,
+    paddingRight: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#F3B9BE',
+    borderColor: 'rgba(227,6,19,0.12)',
+    ...Shadow.sm,
   },
-  walletText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '800' },
-  iconBtn: { position: 'relative', padding: 4 },
-  iconBtnText: { fontSize: 21 },
-  profileBtn: {
-    width: 38,
-    height: 38,
-    overflow: 'hidden',
+  walletIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileAvatar: {
-    width: 30,
-    height: 30,
-    overflow: 'hidden',
+  walletLabel: {
+    color: Colors.textMuted,
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  walletText: {
+    color: Colors.textPrimary,
+    fontSize: FontSize.xs,
+    lineHeight: 15,
+    fontWeight: '900',
+  },
+  headerIconButton: {
+    position: 'relative',
+    width: 42,
+    height: 42,
     borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(17,17,17,0.06)',
+    ...Shadow.sm,
+  },
+  locationRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(227,6,19,0.09)',
+  },
+  locationIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.xs,
+  },
+  locationCopy: { flex: 1, marginLeft: 10, marginRight: 6 },
+  locationLabel: {
+    color: Colors.primary,
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+  },
+  locationText: {
+    marginTop: 2,
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+    fontWeight: '800',
+  },
+  locationChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileBtn: {
+    padding: 3,
+  },
+  profileAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
+    overflow: 'hidden',
+    borderWidth: 2,
     borderColor: Colors.white,
   },
   profileAvatarImage: { width: '100%', height: '100%' },
   profileAvatarText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '900' },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: Colors.secondary,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    top: -4,
+    right: -4,
+    backgroundColor: Colors.primary,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.primaryLight,
+    borderWidth: 2,
+    borderColor: Colors.white,
   },
-  badgeText: { fontSize: 8, color: Colors.white, fontWeight: '800' },
+  badgeText: { fontSize: 8, color: Colors.white, fontWeight: '900' },
 
   /* Search */
   searchWrapper: {
     backgroundColor: Colors.primaryLight,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    ...Shadow.sm,
+    paddingHorizontal: 7,
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: 'rgba(227,6,19,0.12)',
+    ...Shadow.md,
   },
-  searchIcon: { fontSize: 16, marginRight: 10 },
+  searchIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
   searchInput: {
     flex: 1,
     fontSize: FontSize.sm,
@@ -960,7 +1095,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchClearText: { color: Colors.textMuted, fontSize: FontSize.sm, fontWeight: '900' },
   heroAdvertiseButton: {
     marginTop: 12,
     minHeight: 58,
@@ -1098,10 +1232,11 @@ const styles = StyleSheet.create({
   /* Section */
   section: { paddingHorizontal: Spacing.lg, marginBottom: 22 },
   sectionTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: '800',
+    fontSize: FontSize.xl,
+    fontWeight: '900',
     color: Colors.textPrimary,
     marginBottom: 14,
+    letterSpacing: -0.35,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1110,9 +1245,18 @@ const styles = StyleSheet.create({
   },
   sectionAction: {
     color: Colors.primary,
-    fontSize: FontSize.sm,
-    fontWeight: '800',
+    fontSize: FontSize.xs,
+    fontWeight: '900',
+  },
+  sectionActionButton: {
     marginBottom: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 
   /* Offers */
@@ -1173,16 +1317,18 @@ const styles = StyleSheet.create({
 
   /* Trending */
   trendingCard: {
-    width: 158,
+    width: 166,
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
-    padding: 12,
+    padding: 9,
     marginRight: 12,
-    ...Shadow.sm,
+    borderWidth: 1,
+    borderColor: '#E9EDF4',
+    ...Shadow.md,
   },
   trendingArt: {
-    height: 82,
-    borderRadius: Radius.md,
+    height: 100,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
@@ -1226,48 +1372,55 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: FontSize.sm,
     fontWeight: '800',
-    minHeight: 36,
+    minHeight: 34,
+    paddingHorizontal: 2,
   },
   trendingSub: {
     color: Colors.textMuted,
     fontSize: FontSize.xs,
     fontWeight: '600',
     marginTop: 2,
+    paddingHorizontal: 2,
   },
   trendingBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 9,
+    paddingLeft: 2,
   },
   trendingPrice: {
     fontSize: FontSize.md,
     fontWeight: '900',
   },
-  trendingArrow: {
-    color: Colors.gray500,
-    fontSize: 24,
-    fontWeight: '700',
-    lineHeight: 24,
+  cardArrowButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   /* Nearby properties */
   propertyNearCard: {
-    width: 168,
+    width: 178,
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
-    padding: 12,
+    padding: 9,
     marginRight: 12,
-    ...Shadow.sm,
+    borderWidth: 1,
+    borderColor: '#E9EDF4',
+    ...Shadow.md,
   },
   propertyNearImageWrap: {
-    height: 90,
-    borderRadius: Radius.md,
+    height: 104,
+    borderRadius: 14,
     backgroundColor: Colors.secondaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 11,
   },
   propertyNearImage: {
     width: '100%',
@@ -1296,20 +1449,35 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: FontSize.sm,
     fontWeight: '800',
-    minHeight: 36,
+    minHeight: 34,
+    paddingHorizontal: 2,
+  },
+  propertyNearAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 2,
+    marginTop: 3,
   },
   propertyNearAddress: {
+    flex: 1,
     color: Colors.textMuted,
     fontSize: FontSize.xs,
     fontWeight: '600',
-    marginTop: 2,
+  },
+  propertyNearFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 2,
+    marginTop: 9,
   },
   propertyNearPrice: {
     color: Colors.secondary,
     fontSize: FontSize.md,
     fontWeight: '900',
-    marginTop: 9,
   },
+  propertyNearArrow: { backgroundColor: Colors.secondaryLight },
   nearbyLoading: {
     width: 168,
     minHeight: 185,
@@ -1340,34 +1508,40 @@ const styles = StyleSheet.create({
   },
 
   /* Quick actions */
-  quickRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 },
-  quickCard: {
-    width: '48%',
-    minHeight: 82,
-    borderRadius: Radius.md,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
+  quickRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadow.xs,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
   },
-  quickIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
+  quickCard: {
+    width: '31.5%',
+    minHeight: 108,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 7,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(17,17,17,0.06)',
+    ...Shadow.sm,
+  },
+  quickIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
   },
   quickLabel: {
-    flex: 1,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
     color: Colors.textPrimary,
-    fontWeight: '800',
-    lineHeight: 17,
+    fontWeight: '900',
+    lineHeight: 14,
+    textAlign: 'center',
   },
 
   /* Category grid */

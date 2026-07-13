@@ -342,7 +342,14 @@ export default function LocationScreen({ navigation, route }) {
       }
 
       if (route?.params?.returnToCart) {
-        navigation.navigate('MainTabs', { screen: 'Cart' });
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'MainTabs', params: { screen: 'Cart' } }],
+          });
+        }
       } else if (isFirstAddress) {
         navigation.reset({
           index: 0,

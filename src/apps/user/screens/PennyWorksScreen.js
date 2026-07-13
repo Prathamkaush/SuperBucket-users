@@ -96,15 +96,21 @@ export default function PennyWorksScreen({ navigation, route }) {
               </View>
 
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Shop by category</Text>
+                <Text style={styles.sectionTitle}>Shop by Category</Text>
                 {selectedCategory ? <TouchableOpacity onPress={() => setSelectedId(null)}><Text style={styles.viewAll}>View all</Text></TouchableOpacity> : null}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
                 {visibleCatalog.map((category) => {
                   const active = selectedCategory?.id === category.id;
                   return (
-                    <TouchableOpacity key={category.id} style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={() => setSelectedId(active ? null : category.id)}>
-                      {category.imageUrl ? <Image source={{ uri: category.imageUrl }} style={styles.categoryImage} resizeMode="cover" /> : <Text style={styles.categoryIcon}>{category.icon || category.name.charAt(0)}</Text>}
+                    <TouchableOpacity key={category.id} style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={() => setSelectedId(active ? null : category.id)} activeOpacity={0.82}>
+                      {category.imageUrl ? (
+                        <Image source={{ uri: category.imageUrl }} style={styles.categoryImage} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.categoryFallback, active && styles.categoryFallbackActive]}>
+                          <Feather name={serviceCategoryIcon(category.name)} size={25} color={active ? Colors.white : Colors.secondary} />
+                        </View>
+                      )}
                       <Text style={[styles.categoryName, active && styles.categoryNameActive]} numberOfLines={2}>{category.name}</Text>
                     </TouchableOpacity>
                   );
@@ -138,6 +144,19 @@ export default function PennyWorksScreen({ navigation, route }) {
   );
 }
 
+function serviceCategoryIcon(name = '') {
+  const value = name.toLowerCase();
+  if (value.includes('electric')) return 'zap';
+  if (value.includes('plumb')) return 'droplet';
+  if (value.includes('clean')) return 'home';
+  if (value.includes('carpent') || value.includes('repair')) return 'tool';
+  if (value.includes('paint')) return 'edit-3';
+  if (value.includes('salon') || value.includes('beauty')) return 'scissors';
+  if (value.includes('pest')) return 'shield';
+  if (value.includes('appliance')) return 'settings';
+  return 'tool';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { paddingTop: 50, paddingHorizontal: Spacing.lg, paddingBottom: 16, backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -149,8 +168,49 @@ const styles = StyleSheet.create({
   heroIcon: { width: 78, height: 78, marginLeft: 12, borderRadius: 39, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   searchBox: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white, paddingHorizontal: 13 }, searchInput: { flex: 1, paddingVertical: 12, color: Colors.textPrimary },
   sectionHeader: { marginTop: 24, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' }, viewAll: { color: Colors.primary, fontSize: FontSize.xs, fontWeight: '800' },
-  categoryRow: { gap: 10, paddingBottom: 4 }, categoryCard: { width: 88, minHeight: 90, alignItems: 'center', justifyContent: 'center', padding: 9, borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, backgroundColor: Colors.white }, categoryCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight }, categoryIcon: { color: Colors.primary, fontSize: 25, fontWeight: '900' }, categoryName: { marginTop: 7, color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '800', textAlign: 'center' }, categoryNameActive: { color: Colors.primary },
-  categoryImage: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.gray100 },
+  categoryRow: { gap: 8, paddingBottom: 6, paddingRight: 4 },
+  categoryCard: {
+    width: 76,
+    minHeight: 104,
+    alignItems: 'center',
+    padding: 7,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.white,
+    ...Shadow.xs,
+  },
+  categoryCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.white,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.16,
+    elevation: 4,
+  },
+  categoryImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.gray100,
+  },
+  categoryFallback: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.secondaryLight,
+  },
+  categoryFallbackActive: { backgroundColor: Colors.primary },
+  categoryName: {
+    marginTop: 7,
+    color: Colors.textSecondary,
+    fontSize: FontSize.xxs,
+    lineHeight: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  categoryNameActive: { color: Colors.primary, fontWeight: '900' },
   servicesTitle: { marginTop: 25, marginBottom: 12, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
   serviceCard: { marginBottom: 11, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.md, backgroundColor: Colors.white, ...Shadow.sm }, serviceIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight }, serviceCopy: { flex: 1 }, serviceName: { color: Colors.textPrimary, fontSize: FontSize.md, fontWeight: '900' }, serviceDescription: { marginTop: 3, color: Colors.textSecondary, fontSize: FontSize.xs, lineHeight: 16 }, serviceMeta: { marginTop: 5, color: Colors.textMuted, fontSize: 10 }, priceBox: { alignItems: 'flex-end' }, price: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' }, book: { marginTop: 6, color: Colors.primary, fontSize: FontSize.xs, fontWeight: '900' }, empty: { padding: 30, textAlign: 'center', color: Colors.textMuted },
   serviceImage: { width: '100%', height: '100%', borderRadius: 24 },

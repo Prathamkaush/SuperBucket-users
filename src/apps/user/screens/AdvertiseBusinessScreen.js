@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -16,9 +16,11 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../theme/theme';
 import BackButton from '../components/BackButton';
-import { submitBusinessAd } from '../services/homeOffers';
+import { getBusinessAdPlans, submitBusinessAd, updateBusinessAd } from '../services/homeOffers';
+import { getUploadUrl } from '../services/api';
 
-export default function AdvertiseBusinessScreen({ navigation }) {
+export default function AdvertiseBusinessScreen({ navigation, route }) {
+  const editingAd = route?.params?.ad || null;
   const [posterImage, setPosterImage] = useState(null);
   const [businessName, setBusinessName] = useState('');
   const [category, setCategory] = useState('');
@@ -27,6 +29,26 @@ export default function AdvertiseBusinessScreen({ navigation }) {
   const [phone, setPhone] = useState('');
   const [offer, setOffer] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [plans, setPlans] = useState([]);
+  const [selectedPlanId, setSelectedPlanId] = useState(editingAd?.planId || null);
+  const posterPreviewUri = posterImage?.uri || (editingAd?.imageUrl ? getUploadUrl('business-ads', editingAd.imageUrl) : null);
+
+  useEffect(() => {
+    if (editingAd) {
+      setBusinessName(editingAd.businessName || '');
+      setCategory(editingAd.category || '');
+      setDescription(editingAd.description || '');
+      setAddress(editingAd.address || '');
+      setPhone(editingAd.phone || '');
+      setOffer(editingAd.offerText || '');
+    }
+    getBusinessAdPlans()
+      .then((items) => {
+        setPlans(items || []);
+        setSelectedPlanId((current) => current || items?.[0]?.id || null);
+      })
+      .catch(() => setPlans([]));
+  }, [editingAd]);
 
   const pickPoster = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -52,10 +74,15 @@ export default function AdvertiseBusinessScreen({ navigation }) {
       Alert.alert('Invalid phone number', 'Please enter a valid 10-digit mobile number.');
       return;
     }
+    if (!selectedPlanId) {
+      Alert.alert('Select a package', 'Choose how long you want your advertisement to run.');
+      return;
+    }
 
     try {
       setSubmitting(true);
-      await submitBusinessAd({
+      const payload = {
+        planId: String(selectedPlanId),
         businessName: businessName.trim(),
         category: category.trim() || undefined,
         description: description.trim(),
@@ -69,12 +96,17 @@ export default function AdvertiseBusinessScreen({ navigation }) {
             type: posterImage.mimeType || 'image/jpeg',
           },
         } : {}),
-      });
+      };
+      if (editingAd) await updateBusinessAd(editingAd.id, payload);
+      else await submitBusinessAd(payload);
 
       Alert.alert(
-        'Ad submitted',
-        'Your business ad is now visible in the sponsored Home hero carousel.',
-        [{ text: 'Done', onPress: () => navigation.goBack() }],
+        editingAd ? 'Ad updated' : 'Ad submitted for review',
+        'Admin will review your advertisement. Payment becomes available after approval, and your campaign days start only after payment.',
+        [{
+          text: 'View My Ads',
+          onPress: () => editingAd ? navigation.goBack() : navigation.replace('MyBusinessAds'),
+        }],
       );
     } catch (error) {
       Alert.alert('Could not submit ad', error?.message || 'Please try again.');
@@ -93,8 +125,12 @@ export default function AdvertiseBusinessScreen({ navigation }) {
         <BackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>Advertise Business</Text>
-          <Text style={styles.headerSub}>Create a local poster card for customers.</Text>
+          <Text style={styles.headerSub}>Choose a package and submit your campaign for review.</Text>
         </View>
+        <TouchableOpacity style={styles.myAdsButton} onPress={() => navigation.navigate('MyBusinessAds')}>
+          <Feather name="bar-chart-2" size={15} color={Colors.primary} />
+          <Text style={styles.myAdsText}>MY ADS</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -103,8 +139,8 @@ export default function AdvertiseBusinessScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.posterCard}>
-          {posterImage?.uri ? (
-            <Image source={{ uri: posterImage.uri }} style={styles.posterImage} />
+          {posterPreviewUri ? (
+            <Image source={{ uri: posterPreviewUri }} style={styles.posterImage} />
           ) : (
             <View style={styles.posterEmpty}>
               <Feather name="image" size={34} color={Colors.primary} />
@@ -115,6 +151,22 @@ export default function AdvertiseBusinessScreen({ navigation }) {
         </View>
 
         <View style={styles.card}>
+          <View style={styles.field}>
+            <Text style={styles.label}>Advertising package*</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.planRow}>
+              {plans.map((plan) => {
+                const selected = selectedPlanId === plan.id;
+                return (
+                  <TouchableOpacity key={plan.id} style={[styles.planCard, selected && styles.planCardSelected]} onPress={() => setSelectedPlanId(plan.id)}>
+                    <Text style={[styles.planName, selected && styles.planTextSelected]}>{plan.name}</Text>
+                    <Text style={[styles.planPrice, selected && styles.planTextSelected]}>Rs {Number(plan.price).toFixed(0)}</Text>
+                    <Text style={[styles.planDays, selected && styles.planDaysSelected]}>{plan.durationDays} days</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {!plans.length ? <Text style={styles.planEmpty}>No advertising packages are currently available.</Text> : null}
+          </View>
           <View style={styles.field}>
             <Text style={styles.label}>Shop image</Text>
             <TouchableOpacity style={styles.imageButton} onPress={pickPoster} activeOpacity={0.8}>
@@ -201,7 +253,7 @@ export default function AdvertiseBusinessScreen({ navigation }) {
           disabled={submitting}
         >
           <Feather name="send" size={18} color={Colors.white} />
-          <Text style={styles.submitText}>{submitting ? 'SUBMITTING...' : 'SUBMIT AD REQUEST'}</Text>
+          <Text style={styles.submitText}>{submitting ? 'SUBMITTING...' : editingAd ? 'RESUBMIT FOR REVIEW' : 'SUBMIT AD REQUEST'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -221,6 +273,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerCopy: { flex: 1 },
+  myAdsButton: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: Radius.full, backgroundColor: Colors.white, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: '#F3B9BE' },
+  myAdsText: { color: Colors.primary, fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
   headerTitle: { color: Colors.textPrimary, fontSize: FontSize.xl, fontWeight: '900' },
   headerSub: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '600', marginTop: 3 },
   content: { padding: Spacing.lg, paddingBottom: 36 },
@@ -250,6 +304,15 @@ const styles = StyleSheet.create({
     ...Shadow.sm,
   },
   field: { marginBottom: 15 },
+  planRow: { gap: 10, paddingVertical: 2 },
+  planCard: { width: 112, minHeight: 92, borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.gray50, padding: 12 },
+  planCardSelected: { borderColor: Colors.primary, backgroundColor: Colors.primary },
+  planName: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '900' },
+  planPrice: { marginTop: 7, color: Colors.textPrimary, fontSize: FontSize.lg, fontWeight: '900' },
+  planDays: { marginTop: 3, color: Colors.textMuted, fontSize: FontSize.xs, fontWeight: '700' },
+  planTextSelected: { color: Colors.white },
+  planDaysSelected: { color: 'rgba(255,255,255,0.78)' },
+  planEmpty: { color: Colors.textMuted, fontSize: FontSize.xs, marginTop: 5 },
   label: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '800', marginBottom: 7 },
   input: {
     minHeight: 48,
