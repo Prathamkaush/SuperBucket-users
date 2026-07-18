@@ -79,6 +79,8 @@ function matchesAttributes(product, selectedAttributes) {
 export default function MarketplaceScreen({ navigation, route }) {
   const isTabScreen = route.name === 'Grocery';
   const categoryId = route.params?.categoryId;
+  const categoryIds = Array.isArray(route.params?.categoryIds) ? route.params.categoryIds : [];
+  const categoryIdsQuery = categoryIds.join(',');
   const categoryName = route.params?.categoryName;
   const initialSearch = route.params?.search || '';
   const [products, setProducts] = useState([]);
@@ -100,7 +102,7 @@ export default function MarketplaceScreen({ navigation, route }) {
 
   useEffect(() => {
     setSelectedTypeId(null);
-  }, [categoryId]);
+  }, [categoryId, categoryIdsQuery]);
 
   useEffect(() => {
     const nextSearch = route.params?.search || '';
@@ -122,6 +124,7 @@ export default function MarketplaceScreen({ navigation, route }) {
         page: nextPage,
         limit: PAGE_SIZE,
         categoryId,
+        categoryIds: categoryIdsQuery || undefined,
         typeId: selectedTypeId || undefined,
         search: submittedSearch.trim() || undefined,
         minPrice: filters.minPrice || undefined,
@@ -160,7 +163,7 @@ export default function MarketplaceScreen({ navigation, route }) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [categoryId, filters, selectedTypeId, submittedSearch]);
+  }, [categoryId, categoryIdsQuery, filters, selectedTypeId, submittedSearch]);
 
   const loadMoreProducts = () => {
     if (loading || loadingMore || !hasMore) return;
@@ -169,11 +172,11 @@ export default function MarketplaceScreen({ navigation, route }) {
 
   const loadTypes = useCallback(async () => {
     try {
-      setProductTypes(await getProductTypes(categoryId));
+      setProductTypes(categoryIdsQuery ? [] : await getProductTypes(categoryId));
     } catch {
       setProductTypes([]);
     }
-  }, [categoryId]);
+  }, [categoryId, categoryIdsQuery]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -213,6 +216,7 @@ export default function MarketplaceScreen({ navigation, route }) {
     setSelectedTypeId(null);
     navigation.setParams({
       categoryId: category?.id,
+      categoryIds: undefined,
       categoryName: category?.name,
     });
   };
@@ -280,10 +284,10 @@ export default function MarketplaceScreen({ navigation, route }) {
           contentContainerStyle={styles.typeList}
         >
           <TouchableOpacity
-            style={[styles.typeChip, !categoryId && styles.typeChipActive]}
+            style={[styles.typeChip, !categoryId && !categoryIdsQuery && styles.typeChipActive]}
             onPress={() => selectCategory(null)}
           >
-            <Text style={[styles.typeChipText, !categoryId && styles.typeChipTextActive]}>
+            <Text style={[styles.typeChipText, !categoryId && !categoryIdsQuery && styles.typeChipTextActive]}>
               All
             </Text>
           </TouchableOpacity>

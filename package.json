@@ -4,8 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "build:apk": "eas build --platform android --profile preview"
   },
   "dependencies": {
@@ -16,10 +16,13 @@
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.35",
     "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.23",
     "expo-image-picker": "~17.0.11",
     "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.12",
+    "expo-print": "~15.0.8",
     "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
     "lucide-react-native": "^0.577.0",
     "react": "19.1.0",

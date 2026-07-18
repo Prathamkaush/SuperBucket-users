@@ -26,10 +26,10 @@
     "web": {},
     "extra": {
       "eas": {
-        "projectId": "a3af2d41-e02a-4107-a9b4-0fc34a755586"
+        "projectId": "7b804857-569c-4bf5-aace-f4c77fa50f84"
       }
     },
-    "owner": "prathamkaushik2002",
+    "owner": "hiteshkaushik33",
     "plugins": [
       "@react-native-google-signin/google-signin",
       "expo-secure-store",

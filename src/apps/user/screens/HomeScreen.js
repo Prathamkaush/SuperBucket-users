@@ -6,6 +6,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, FontSize, Spacing, Radius, Shadow } from '../theme/theme';
 import { useFocusEffect } from '@react-navigation/native';
 import LogoBrand from '../components/LogoBrand';
+import BusinessAdDetailsModal from '../components/BusinessAdDetailsModal';
 import { getCategories } from '../services/categories';
 import { getProducts } from '../services/products';
 import { getLiveProperties } from '../services/properties';
@@ -15,11 +16,8 @@ import { getProfile } from '../services/profile';
 import { getUploadUrl } from '../services/api';
 import { getWallet } from '../services/wallet';
 import { getNotifications } from '../services/notifications';
-import { getSettings } from '../services/settings';
 import { getHomeOffers, registerBusinessAdClick } from '../services/homeOffers';
 import { getMyOrders, reorderOrder } from '../services/orders';
-
-const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
 const CATEGORIES = [
   { id: '1',  icon: '🛒', label: 'Groceries',         screen: 'Grocery',      bg: '#FFF0F0' },
@@ -41,12 +39,10 @@ const CATEGORIES = [
 ];
 
 const QUICK_ACTIONS = [
-  { icon: 'bullhorn', iconSet: 'MaterialCommunityIcons', label: 'Advertise Business', screen: 'AdvertiseBusiness', color: Colors.primaryLight, iconColor: Colors.primary },
+  { icon: 'storefront-outline', iconSet: 'MaterialCommunityIcons', label: 'Local Shops', screen: 'LocalShops', color: Colors.primaryLight, iconColor: Colors.primary },
   { icon: 'repeat', iconSet: 'Feather', label: 'Buy Again', action: 'reorder', color: '#FFF7E6', iconColor: '#B45309' },
   { icon: 'tool', iconSet: 'Feather', label: 'Penny Works', screen: 'PennyWorks', color: '#FFF3E6', iconColor: Colors.accent },
   { icon: 'home-city-outline', iconSet: 'MaterialCommunityIcons', label: 'Properties', screen: 'Rentals', color: '#E6FFFA', iconColor: Colors.success },
-  { icon: 'home-plus-outline', iconSet: 'MaterialCommunityIcons', label: 'List Property', screen: 'RenterPortal', color: '#EEF2FF', iconColor: '#4F46E5' },
-  { icon: 'briefcase', iconSet: 'Feather', label: 'Provide Services', screen: 'ProviderPortal', color: '#ECFDF5', iconColor: Colors.success },
 ];
 
 function ActionIcon({ action, size = 24 }) {
@@ -152,14 +148,19 @@ export default function HomeScreen({ navigation }) {
   const [categoriesError, setCategoriesError] = useState('');
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
+  const [serviceItems, setServiceItems] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [groceryProducts, setGroceryProducts] = useState([]);
+  const [groceriesLoading, setGroceriesLoading] = useState(true);
+  const [groceryCategoryIds, setGroceryCategoryIds] = useState([]);
   const [nearbyProperties, setNearbyProperties] = useState([]);
   const [nearbyPropertiesLoading, setNearbyPropertiesLoading] = useState(true);
   const [defaultAddress, setDefaultAddress] = useState(null);
   const [user, setUser] = useState(null);
   const [walletBalance, setWalletBalance] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [nextDeliverySlot, setNextDeliverySlot] = useState(() => getNextDeliverySlot(DEFAULT_SLOT_TIMES));
   const [homeOffers, setHomeOffers] = useState(FALLBACK_OFFERS);
+  const [selectedBusinessAd, setSelectedBusinessAd] = useState(null);
   const [reordering, setReordering] = useState(false);
   const [activeAdIndex, setActiveAdIndex] = useState(0);
   const [contentPhase, setContentPhase] = useState(0);
@@ -216,12 +217,11 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const loadHeaderData = useCallback(async () => {
-    const [profile, addresses, wallet, notifications, settings] = await Promise.all([
+    const [profile, addresses, wallet, notifications] = await Promise.all([
       getProfile().catch(() => null),
       getAddresses().catch(() => []),
       getWallet().catch(() => null),
       getNotifications(1, 1).catch(() => null),
-      getSettings().catch(() => ({})),
     ]);
 
     const selectedAddress = addresses.find((address) => address.isDefault) || addresses[0] || null;
@@ -229,7 +229,51 @@ export default function HomeScreen({ navigation }) {
     setDefaultAddress(selectedAddress);
     setWalletBalance(Number(wallet?.wallet?.balance || 0));
     setUnreadNotifications(Number(notifications?.unread || 0));
-    setNextDeliverySlot(getNextDeliverySlot(settings?.deliverySlotTimes));
+  }, []);
+
+  const loadHomeShowcases = useCallback(async () => {
+    try {
+      setServicesLoading(true);
+      setGroceriesLoading(true);
+      setCategoriesLoading(true);
+      setCategoriesError('');
+      const [catalog, categoryItems] = await Promise.all([
+        getServiceCatalog().catch(() => []),
+        getCategories(),
+      ]);
+      setCategories(categoryItems);
+
+      const services = catalog.flatMap((category) =>
+        (category.packages || []).map((servicePackage) => ({
+          ...servicePackage,
+          category,
+        })),
+      );
+      setServiceItems(services.slice(0, 8));
+
+      const groceryCategories = categoryItems.filter((category) =>
+        String(category.name || '').toLowerCase().includes('groceries'),
+      );
+      const categoryIds = groceryCategories.map((category) => category.id);
+      setGroceryCategoryIds(categoryIds);
+
+      const responses = await Promise.all(categoryIds.map((categoryId) =>
+        getProducts({ page: 1, limit: 6, categoryId, stock: 'in' }).catch(() => ({ products: [] })),
+      ));
+      const uniqueProducts = Array.from(new Map(
+        responses.flatMap((response) => response.products || []).map((product) => [product.id, product]),
+      ).values());
+      setGroceryProducts(uniqueProducts.slice(0, 8));
+    } catch (error) {
+      setCategoriesError(error?.message || 'Unable to load categories');
+      setServiceItems([]);
+      setGroceryProducts([]);
+      setGroceryCategoryIds([]);
+    } finally {
+      setCategoriesLoading(false);
+      setServicesLoading(false);
+      setGroceriesLoading(false);
+    }
   }, []);
 
   const loadNearbyProperties = useCallback(async () => {
@@ -261,10 +305,12 @@ export default function HomeScreen({ navigation }) {
       deferredRequestsRef.current.add(key);
       request();
     };
-    if (contentPhase >= 1) requestOnce('trending', loadTrending);
+    if (contentPhase >= 1) {
+      requestOnce('trending', loadTrending);
+      requestOnce('home-showcases', loadHomeShowcases);
+    }
     if (contentPhase >= 2) requestOnce('nearby', loadNearbyProperties);
-    if (contentPhase >= 3) requestOnce('categories', loadCategories);
-  }, [contentPhase, loadCategories, loadNearbyProperties, loadTrending]);
+  }, [contentPhase, loadHomeShowcases, loadNearbyProperties, loadTrending]);
 
   const loadSectionsForScroll = (event) => {
     const y = event.nativeEvent.contentOffset.y;
@@ -275,11 +321,25 @@ export default function HomeScreen({ navigation }) {
 
   const openTrending = (product) =>
     navigation.navigate('ProductDetail', { productId: product.id, product });
+  const openService = (servicePackage) =>
+    navigation.navigate('ServiceDetail', { servicePackage, category: servicePackage.category });
   const openBusinessAd = (ad) => {
     if (!ad.businessAdId) return;
     registerBusinessAdClick(ad.businessAdId).catch(() => undefined);
-    const phone = String(ad.buttonLabel || '').replace(/\D/g, '');
-    if (phone) Linking.openURL(`tel:${phone}`).catch(() => undefined);
+    setSelectedBusinessAd({ ...ad, businessName: ad.title });
+  };
+  const openOffer = (offer) => {
+    const phone = extractOfferPhone(offer);
+    if (phone) {
+      Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('Unable to call', 'The phone dialer could not be opened.'));
+      return;
+    }
+    const couponCode = String(offer.code || '').trim().toUpperCase();
+    if (couponCode) {
+      navigation.navigate('Cart', { couponCode, couponNonce: Date.now() });
+      return;
+    }
+    Alert.alert(offer.title || 'Offer', offer.subtitle || 'No action is available for this offer.');
   };
   const runSearch = async () => {
     const term = search.trim();
@@ -570,20 +630,6 @@ export default function HomeScreen({ navigation }) {
           </View>
         ) : null}
 
-        {/* ─── Delivery Slot Banner ─── */}
-        <View style={styles.slotBanner}>
-          <View style={styles.slotLeft}>
-              <Text style={styles.slotEmoji}>🌆</Text>
-            <View>
-              <Text style={styles.slotLabel}>Next Delivery Slot</Text>
-              <Text style={styles.slotTime}>{nextDeliverySlot.label}</Text>
-            </View>
-          </View>
-          <View style={styles.slotBadge}>
-            <Text style={styles.slotBadgeText}>{nextDeliverySlot.dayLabel}</Text>
-          </View>
-        </View>
-
         {/* ─── Offers ─── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Offers for You 🎉</Text>
@@ -596,6 +642,9 @@ export default function HomeScreen({ navigation }) {
                   { backgroundColor: offer.imageUrl ? Colors.gray100 : (offer.color || Colors.primary) },
                 ]}
                 activeOpacity={0.88}
+                onPress={() => openOffer(offer)}
+                accessibilityRole="button"
+                accessibilityLabel={`${offer.title}. ${offer.phoneNumber ? 'Call now' : offer.code ? `Apply coupon ${offer.code}` : 'View offer'}`}
               >
                 {offer.imageUrl ? (
                   <>
@@ -617,7 +666,68 @@ export default function HomeScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        {/* ─── Quick Actions ─── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Services</Text>
+            <TouchableOpacity style={styles.sectionActionButton} onPress={() => navigation.navigate('PennyWorks')}>
+              <Text style={styles.sectionAction}>View all</Text>
+              <Feather name="arrow-up-right" size={13} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.showcaseRow}>
+            {servicesLoading ? <View style={styles.showcaseLoading}><ActivityIndicator color={Colors.primary} /></View> : null}
+            {!servicesLoading && serviceItems.length === 0 ? <Text style={styles.showcaseEmpty}>No active services yet.</Text> : null}
+            {serviceItems.map((servicePackage) => (
+              <TouchableOpacity key={servicePackage.id} style={styles.homeServiceCard} onPress={() => openService(servicePackage)} activeOpacity={0.84}>
+                <View style={styles.homeServiceArt}>
+                  {servicePackage.category?.imageUrl ? (
+                    <Image source={{ uri: servicePackage.category.imageUrl }} style={styles.homeServiceImage} resizeMode="cover" />
+                  ) : <Feather name="tool" size={27} color={Colors.primary} />}
+                </View>
+                <Text style={styles.homeServiceCategory} numberOfLines={1}>{servicePackage.category?.name || 'Service'}</Text>
+                <Text style={styles.homeServiceName} numberOfLines={2}>{servicePackage.name}</Text>
+                <View style={styles.homeServiceBottom}>
+                  <Text style={styles.homeServicePrice}>Rs {Number(servicePackage.price || 0).toFixed(0)}</Text>
+                  <Feather name="chevron-right" size={16} color={Colors.primary} />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Groceries</Text>
+            <TouchableOpacity
+              style={[styles.sectionActionButton, !groceryCategoryIds.length && styles.sectionActionDisabled]}
+              disabled={!groceryCategoryIds.length}
+              onPress={() => navigation.navigate('Marketplace', { categoryIds: groceryCategoryIds, categoryName: 'Groceries' })}
+            >
+              <Text style={styles.sectionAction}>View all</Text>
+              <Feather name="arrow-up-right" size={13} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.showcaseRow}>
+            {groceriesLoading ? <View style={styles.showcaseLoading}><ActivityIndicator color={Colors.success} /></View> : null}
+            {!groceriesLoading && groceryProducts.length === 0 ? <Text style={styles.showcaseEmpty}>No grocery products available.</Text> : null}
+            {groceryProducts.map((product) => (
+              <TouchableOpacity key={product.id} style={styles.trendingCard} activeOpacity={0.84} onPress={() => openTrending(product)}>
+                <View style={[styles.trendingArt, { backgroundColor: '#ECFDF5' }]}>
+                  {product.imageUrl ? <Image source={{ uri: product.imageUrl }} style={styles.trendingImage} /> : <Text style={[styles.trendingInitial, { color: Colors.success }]}>{product.name.charAt(0)}</Text>}
+                  <View style={[styles.trendingTag, { backgroundColor: Colors.success }]}><Text style={styles.trendingTagText}>{product.category}</Text></View>
+                </View>
+                <Text style={styles.trendingTitle} numberOfLines={2}>{product.name}</Text>
+                <Text style={styles.trendingSub} numberOfLines={1}>{product.variants[0]?.label || product.brand || 'Available now'}</Text>
+                <View style={styles.trendingBottom}>
+                  <Text style={[styles.trendingPrice, { color: Colors.success }]}>Rs {Number(product.price || 0).toLocaleString()}</Text>
+                  <View style={styles.cardArrowButton}><Feather name="chevron-right" size={16} color={Colors.success} /></View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* ─── Trending ─── */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Trending</Text>
@@ -787,6 +897,11 @@ export default function HomeScreen({ navigation }) {
         {/* Bottom spacer for tab bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
+      <BusinessAdDetailsModal
+        ad={selectedBusinessAd}
+        visible={Boolean(selectedBusinessAd)}
+        onClose={() => setSelectedBusinessAd(null)}
+      />
     </View>
   );
 }
@@ -866,50 +981,19 @@ function filterServices(catalog = [], term = '') {
   return matches;
 }
 
-function getNextDeliverySlot(slotTimes = DEFAULT_SLOT_TIMES, now = new Date()) {
-  const labels = (Array.isArray(slotTimes) && slotTimes.length ? slotTimes : DEFAULT_SLOT_TIMES)
-    .map((slot) => String(slot || '').trim())
-    .filter(Boolean);
-  const fallbackLabel = labels[0] || 'Available soon';
-  const parsedSlots = labels
-    .map((label, index) => ({ label, index, minutes: getSlotStartMinutes(label) }))
-    .filter((slot) => Number.isFinite(slot.minutes))
-    .sort((a, b) => a.minutes - b.minutes || a.index - b.index);
-
-  if (!parsedSlots.length) {
-    return { label: fallbackLabel, dayLabel: 'Today' };
-  }
-
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const nextToday = parsedSlots.find((slot) => slot.minutes > currentMinutes);
-
-  return {
-    label: nextToday?.label || parsedSlots[0].label,
-    dayLabel: nextToday ? 'Today' : 'Tomorrow',
-  };
-}
-
-function getSlotStartMinutes(label) {
-  const match = String(label).match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
-  if (!match) return Number.NaN;
-
-  let hours = Number(match[1]);
-  const minutes = Number(match[2] || 0);
-  const period = match[3]?.toUpperCase();
-
-  if (hours > 23 || minutes > 59) return Number.NaN;
-  if (period === 'PM' && hours < 12) hours += 12;
-  if (period === 'AM' && hours === 12) hours = 0;
-
-  return hours * 60 + minutes;
-}
-
 function iconForOffer(icon = '') {
   if (icon === 'wallet') return 'Rs';
   if (icon === 'truck') return 'D';
   if (icon === 'users') return 'R';
   if (icon === 'tag') return '%';
   return 'G';
+}
+
+function extractOfferPhone(offer = {}) {
+  const explicit = String(offer.phoneNumber || '').replace(/[^\d+]/g, '');
+  if (explicit.replace(/\D/g, '').length >= 7) return explicit;
+  const match = `${offer.buttonLabel || ''} ${offer.subtitle || ''}`.match(/\+?\d[\d\s-]{5,}\d/);
+  return match ? match[0].replace(/[^\d+]/g, '') : '';
 }
 
 const styles = StyleSheet.create({
@@ -1205,30 +1289,6 @@ const styles = StyleSheet.create({
   adDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.gray300 },
   adDotActive: { width: 18, backgroundColor: Colors.primary },
 
-  /* Slot banner */
-  slotBanner: {
-    margin: Spacing.lg,
-    backgroundColor: Colors.secondaryLight,
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    borderColor: Colors.secondary,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  slotLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  slotEmoji: { fontSize: 28 },
-  slotLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '500' },
-  slotTime: { fontSize: FontSize.sm, fontWeight: '800', color: Colors.secondary, marginTop: 2 },
-  slotBadge: {
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
-  },
-  slotBadgeText: { color: Colors.white, fontSize: FontSize.xs, fontWeight: '800' },
-
   /* Section */
   section: { paddingHorizontal: Spacing.lg, marginBottom: 22 },
   sectionTitle: {
@@ -1258,6 +1318,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  sectionActionDisabled: { opacity: 0.45 },
 
   /* Offers */
   offerCard: {
@@ -1315,7 +1376,18 @@ const styles = StyleSheet.create({
   },
   claimText: { fontSize: FontSize.xs, color: Colors.white, fontWeight: '700' },
 
-  /* Trending */
+  showcaseRow: { gap: 12, paddingRight: 4 },
+  showcaseLoading: { width: 150, height: 190, alignItems: 'center', justifyContent: 'center' },
+  showcaseEmpty: { color: Colors.textMuted, fontSize: FontSize.sm, paddingVertical: 30 },
+  homeServiceCard: { width: 156, minHeight: 200, padding: 12, borderRadius: Radius.lg, backgroundColor: Colors.white, ...Shadow.sm },
+  homeServiceArt: { height: 86, overflow: 'hidden', borderRadius: Radius.md, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  homeServiceImage: { width: '100%', height: '100%' },
+  homeServiceCategory: { marginTop: 10, color: Colors.primary, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  homeServiceName: { marginTop: 4, minHeight: 38, color: Colors.textPrimary, fontSize: FontSize.sm, lineHeight: 18, fontWeight: '900' },
+  homeServiceBottom: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  homeServicePrice: { color: Colors.textPrimary, fontSize: FontSize.sm, fontWeight: '900' },
+
+  /* Trending and groceries */
   trendingCard: {
     width: 166,
     backgroundColor: Colors.white,

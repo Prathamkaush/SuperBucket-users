@@ -114,7 +114,7 @@ export default function MyBusinessAdsScreen({ navigation }) {
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}><Text style={styles.title}>My Ads</Text><Text style={styles.subtitle}>Manage, pay and monitor your campaigns</Text></View>
-        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AdvertiseBusiness')}><Feather name="plus" size={18} color={Colors.white} /></TouchableOpacity>
+        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AdvertiseChoice')}><Feather name="plus" size={18} color={Colors.white} /></TouchableOpacity>
       </View>
 
       {loading ? <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View> : (

@@ -35,8 +35,9 @@ const MENU_ITEMS = [
   { label: 'Saved Addresses', screen: 'Location', Icon: MapPin },
   { label: 'Order History', screen: 'Orders', Icon: ShoppingBag },
   { label: 'Service Bookings', screen: 'ServiceBookings', Icon: Wrench },
-  { label: 'My Properties', screen: 'RenterPortal', Icon: House },
-  { label: 'Provider Dashboard', screen: 'ProviderPortal', Icon: BriefcaseBusiness },
+  { label: 'List Property', screen: 'RenterPortal', Icon: House },
+  { label: 'Provide Services', screen: 'ProviderPortal', Icon: BriefcaseBusiness },
+  { label: 'Business Ads', screen: 'AdvertiseChoice', Icon: BriefcaseBusiness },
   { label: 'My Wallet', screen: 'Wallet', Icon: WalletCards },
   { label: 'Help Center', screen: 'ContactSupport', Icon: CircleQuestionMark },
   { label: 'Logout', screen: 'Login', Icon: LogOut, danger: true },
@@ -189,10 +190,12 @@ export default function ProfileScreen({ navigation }) {
                       ? `${orderCount} orders placed`
                     : item.label === 'Service Bookings'
                         ? 'Track jobs and rate service partners'
-                      : item.label === 'My Properties'
+                      : item.label === 'List Property'
                         ? 'Add listings, leads, and property earnings'
-                      : item.label === 'Provider Dashboard'
+                      : item.label === 'Provide Services'
                         ? 'Manage services, jobs, and payouts'
+                      : item.label === 'Business Ads'
+                        ? 'Advertise a business or add a local shop'
                       : item.label === 'Saved Addresses'
                         ? 'Manage delivery locations'
                         : item.label === 'My Wallet'

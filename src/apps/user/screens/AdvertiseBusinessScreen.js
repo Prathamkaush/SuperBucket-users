@@ -21,6 +21,8 @@ import { getUploadUrl } from '../services/api';
 
 export default function AdvertiseBusinessScreen({ navigation, route }) {
   const editingAd = route?.params?.ad || null;
+  const adType = editingAd?.adType || route?.params?.adType || 'BUSINESS';
+  const isLocalShop = adType === 'LOCAL_SHOP';
   const [posterImage, setPosterImage] = useState(null);
   const [businessName, setBusinessName] = useState('');
   const [category, setCategory] = useState('');
@@ -82,6 +84,7 @@ export default function AdvertiseBusinessScreen({ navigation, route }) {
     try {
       setSubmitting(true);
       const payload = {
+        adType,
         planId: String(selectedPlanId),
         businessName: businessName.trim(),
         category: category.trim() || undefined,
@@ -124,8 +127,8 @@ export default function AdvertiseBusinessScreen({ navigation, route }) {
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
-          <Text style={styles.headerTitle}>Advertise Business</Text>
-          <Text style={styles.headerSub}>Choose a package and submit your campaign for review.</Text>
+          <Text style={styles.headerTitle}>{isLocalShop ? 'Add Local Shop' : 'Advertise Business'}</Text>
+          <Text style={styles.headerSub}>{isLocalShop ? 'List your shop in the Local Shops directory.' : 'Choose a package and submit your campaign for review.'}</Text>
         </View>
         <TouchableOpacity style={styles.myAdsButton} onPress={() => navigation.navigate('MyBusinessAds')}>
           <Feather name="bar-chart-2" size={15} color={Colors.primary} />
@@ -144,7 +147,7 @@ export default function AdvertiseBusinessScreen({ navigation, route }) {
           ) : (
             <View style={styles.posterEmpty}>
               <Feather name="image" size={34} color={Colors.primary} />
-              <Text style={styles.posterTitle}>Business poster</Text>
+              <Text style={styles.posterTitle}>{isLocalShop ? 'Local shop photo' : 'Business poster'}</Text>
               <Text style={styles.posterSub}>Upload a clear photo of your shop.</Text>
             </View>
           )}

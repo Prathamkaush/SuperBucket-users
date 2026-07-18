@@ -30,6 +30,7 @@ import PennyWorksScreen  from './screens/PennyWorksScreen';
 import ServiceCheckoutScreen from './screens/ServiceCheckoutScreen';
 import ServiceDetailScreen from './screens/ServiceDetailScreen';
 import ServiceBookingsScreen from './screens/ServiceBookingsScreen';
+import ServiceBookingDetailScreen from './screens/ServiceBookingDetailScreen';
 import RentalsScreen     from './screens/RentalsScreen';
 import RentalDetailScreen from './screens/RentalDetailScreen';
 import MarketplaceScreen from './screens/MarketplaceScreen';
@@ -42,6 +43,8 @@ import EditProfileScreen from './screens/EditProfileScreen';
 import ContactSupportScreen from './screens/ContactSupportScreen';
 import AdvertiseBusinessScreen from './screens/AdvertiseBusinessScreen';
 import MyBusinessAdsScreen from './screens/MyBusinessAdsScreen';
+import AdvertiseChoiceScreen from './screens/AdvertiseChoiceScreen';
+import LocalShopsScreen from './screens/LocalShopsScreen';
 import RenterDashboardScreen from '../renter/screens/RenterDashboardScreen';
 import RenterListingsScreen from '../renter/screens/RenterListingsScreen';
 import AddSpaceScreen from '../renter/screens/AddSpaceScreen';
@@ -54,6 +57,7 @@ import ProviderOnboardingScreen from '../provider/screens/OnboardingScreen';
 import ProviderDashboardScreen from '../provider/screens/DashboardScreen';
 import ProviderJobsScreen from '../provider/screens/JobsScreen';
 import ProviderJobDetailScreen from '../provider/screens/JobDetailScreen';
+import ProviderServiceExtensionScreen from '../provider/screens/ServiceExtensionScreen';
 import ProviderEarningsScreen from '../provider/screens/EarningsScreen';
 import ProviderProfileScreen from '../provider/screens/ProfileScreen';
 import { getToken as getProviderToken } from '../provider/services/auth';
@@ -307,6 +311,7 @@ function ProviderPortal() {
       <ProviderStack.Screen name="Onboarding" component={ProviderOnboardingScreen} />
       <ProviderStack.Screen name="ProviderTabs" component={ProviderTabs} />
       <ProviderStack.Screen name="JobDetail" component={ProviderJobDetailScreen} />
+      <ProviderStack.Screen name="ServiceExtension" component={ProviderServiceExtensionScreen} />
     </ProviderStack.Navigator>
   );
 }
@@ -333,6 +338,7 @@ export default function UserApp() {
         <Stack.Screen name="ServiceCheckout" component={ServiceCheckoutScreen} />
         <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
         <Stack.Screen name="ServiceBookings" component={ServiceBookingsScreen} />
+        <Stack.Screen name="ServiceBookingDetail" component={ServiceBookingDetailScreen} />
         <Stack.Screen name="Rentals"       component={RentalsScreen} />
         <Stack.Screen name="RentalDetail"  component={RentalDetailScreen} />
         <Stack.Screen name="Marketplace"   component={MarketplaceScreen} />
@@ -343,7 +349,9 @@ export default function UserApp() {
         <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
         <Stack.Screen name="ContactSupport" component={ContactSupportScreen} />
         <Stack.Screen name="AdvertiseBusiness" component={AdvertiseBusinessScreen} />
+        <Stack.Screen name="AdvertiseChoice" component={AdvertiseChoiceScreen} />
         <Stack.Screen name="MyBusinessAds" component={MyBusinessAdsScreen} />
+        <Stack.Screen name="LocalShops" component={LocalShopsScreen} />
         <Stack.Screen name="RenterPortal"  component={RenterPortal} />
         <Stack.Screen name="ProviderPortal" component={ProviderPortal} />
       </Stack.Navigator>

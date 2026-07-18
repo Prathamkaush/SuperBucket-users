@@ -29,6 +29,14 @@ export function getMyServiceBookings() {
   return authenticatedRequest('/services/bookings/my');
 }
 
+export function getServiceBooking(id) {
+  return authenticatedRequest(`/services/bookings/${id}`);
+}
+
+export function getServiceInvoice(id) {
+  return authenticatedRequest(`/services/bookings/${id}/invoice`);
+}
+
 export function cancelServiceBooking(id, reason) {
   return authenticatedRequest(`/services/bookings/${id}/cancel`, {
     method: 'PATCH',

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -35,7 +35,7 @@ const DAY_OPTIONS = [
 ];
 const DEFAULT_SLOT_TIMES = ['10:00 AM', '1:00 PM', '5:00 PM', '8:00 PM'];
 
-export default function CartScreen({ navigation }) {
+export default function CartScreen({ navigation, route }) {
   const { setCount: setGlobalCartCount } = useCartCount();
   const [items, setItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
@@ -136,8 +136,8 @@ export default function CartScreen({ navigation }) {
   const payableTotal = Number(couponPreview?.pricing?.payable ?? total);
   const couponDiscount = Number(couponPreview?.pricing?.couponDiscount || 0);
 
-  const applyCoupon = async () => {
-    const code = couponInput.trim().toUpperCase();
+  const applyCoupon = async (incomingCode) => {
+    const code = String(incomingCode || couponInput).trim().toUpperCase();
     if (!code) return Alert.alert('Enter coupon', 'Enter a coupon code first.');
     if (!selectedAddressId) return Alert.alert('Select address', 'Select a delivery address before applying a coupon.');
     try {
@@ -153,6 +153,14 @@ export default function CartScreen({ navigation }) {
       Alert.alert('Coupon not applied', error?.message || 'This coupon is not valid for your cart.');
     } finally { setApplyingCoupon(false); }
   };
+
+  useEffect(() => {
+    const incomingCode = String(route?.params?.couponCode || '').trim().toUpperCase();
+    if (loading || !incomingCode || applyingCoupon) return;
+    navigation.setParams({ couponCode: undefined, couponNonce: undefined });
+    setCouponInput(incomingCode);
+    applyCoupon(incomingCode);
+  }, [applyingCoupon, loading, navigation, route?.params?.couponCode, route?.params?.couponNonce]);
 
   const showOrderSuccess = async (order) => {
     setItems([]);

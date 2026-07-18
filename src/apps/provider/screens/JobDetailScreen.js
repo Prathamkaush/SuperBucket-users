@@ -26,6 +26,9 @@ export default function JobDetailScreen({ navigation, route }) {
   const directionsUrl = address.latitude && address.longitude
     ? `https://www.google.com/maps/dir/?api=1&destination=${address.latitude},${address.longitude}`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
+  const canExtend = `${job.categoryName} ${job.serviceName}`.toLowerCase().includes('inspection')
+    && ['IN_PROGRESS', 'COMPLETED'].includes(job.status)
+    && !job.extension;
 
   return <View style={styles.page}>
     <View style={styles.header}><TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}><Feather name="arrow-left" size={21} color={Colors.text} /></TouchableOpacity><View><Text style={styles.headerTitle}>Job details</Text><Text style={styles.booking}>{job.bookingNumber}</Text></View></View>
@@ -41,6 +44,8 @@ export default function JobDetailScreen({ navigation, route }) {
       <TouchableOpacity style={styles.directions} onPress={() => open(directionsUrl, 'Maps could not be opened')}><Feather name="navigation" size={18} color={Colors.white} /><Text style={styles.actionText}>View location & directions</Text></TouchableOpacity>
 
       {job.customerNote ? <><Text style={styles.sectionTitle}>Customer note</Text><View style={styles.note}><Text style={styles.noteText}>{job.customerNote}</Text></View></> : null}
+      {canExtend ? <TouchableOpacity style={styles.extend} onPress={() => navigation.navigate('ServiceExtension', { job })}><Feather name="plus-circle" size={19} color={Colors.white} /><Text style={styles.actionText}>Add extended service</Text></TouchableOpacity> : null}
+      {job.extension ? <><Text style={styles.sectionTitle}>Extended service submitted</Text><View style={styles.note}><Text style={styles.extensionName}>{job.extension.serviceName}</Text><Text style={styles.noteText}>{job.extension.durationMinutes} minutes · Rs {Number(job.extension.charge).toFixed(0)}</Text></View></> : null}
     </ScrollView>
   </View>;
 }
@@ -52,4 +57,5 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: Colors.background }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background }, header: { paddingTop: 52, paddingHorizontal: 18, paddingBottom: 15, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border }, back: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.gray50 }, headerTitle: { fontSize: 20, fontWeight: '900' }, booking: { color: Colors.muted, fontSize: 11, marginTop: 2 }, content: { padding: 18, paddingBottom: 50 },
   summary: { ...card }, row: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 }, eyebrow: { color: Colors.secondary, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' }, service: { fontSize: 20, fontWeight: '900', marginTop: 4 }, earning: { color: Colors.success, fontSize: 19, fontWeight: '900' }, time: { color: Colors.textSecondary, marginTop: 12, fontWeight: '700' }, status: { color: Colors.primary, marginTop: 8, fontSize: 11, fontWeight: '900' }, sectionTitle: { fontSize: 16, fontWeight: '900', marginTop: 22, marginBottom: 9 }, infoCard: { ...card, paddingVertical: 4 }, infoRow: { flexDirection: 'row', gap: 11, alignItems: 'flex-start', paddingVertical: 11 }, infoIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.secondaryLight, alignItems: 'center', justifyContent: 'center' }, infoLabel: { color: Colors.muted, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' }, infoValue: { color: Colors.text, fontSize: 14, fontWeight: '700', lineHeight: 20, marginTop: 2 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 12 }, call: { flex: 1, minHeight: 48, borderRadius: 11, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }, message: { flex: 1, minHeight: 48, borderRadius: 11, backgroundColor: Colors.secondaryLight, borderWidth: 1, borderColor: Colors.secondary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }, actionText: { color: Colors.white, fontWeight: '900' }, messageText: { color: Colors.secondary, fontWeight: '900' }, directions: { marginTop: 12, minHeight: 50, borderRadius: 11, backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }, note: { ...card, backgroundColor: Colors.warningLight }, noteText: { color: Colors.textSecondary, lineHeight: 20 },
+  extend: { marginTop: 22, minHeight: 52, borderRadius: 11, backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, extensionName: { color: Colors.text, fontSize: 16, fontWeight: '900', marginBottom: 5 },
 });

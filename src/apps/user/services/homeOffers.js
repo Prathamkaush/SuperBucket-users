@@ -24,6 +24,14 @@ export function getBusinessAdPlans() {
   return apiRequest('/home-offers/business-ad-plans');
 }
 
+export async function getLocalShops() {
+  const shops = await apiRequest('/home-offers/local-shops');
+  return shops.map((shop) => ({
+    ...shop,
+    imageUrl: getUploadUrl('business-ads', shop.imageUrl),
+  }));
+}
+
 export function getMyBusinessAds() {
   return authenticatedRequest('/home-offers/business-ads/my');
 }
